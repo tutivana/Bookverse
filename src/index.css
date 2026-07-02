@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, Cambria, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Custom palette for BookVerse Elegant Dark */
+  --color-brand-50: #121214;       /* Deep dark card background */
+  --color-brand-100: #18181c;      /* Slightly lighter charcoal container */
+  --color-brand-200: #27272a;      /* Zinc border color */
+  --color-brand-300: #3f3f46;      /* Active selection border / text muted */
+  --color-brand-600: #e2b874;      /* Luxurious Antique Gold */
+  --color-brand-800: #c59e5f;      /* Soft Brass Gold Hover */
+  --color-brand-900: #09090b;      /* Main obsidian body background */
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #09090b;
+  color: #f4f4f5;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #e2b874;
+}

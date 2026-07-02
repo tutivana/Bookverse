@@ -1,0 +1,6 @@
+{
+  "name": "BookVerse",
+  "description": "Uma plataforma moderna de leitura de PDFs e ePUBs, audição de audiobooks sincronizados e assistente de leitura inteligente integrado com a API do Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

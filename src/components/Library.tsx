@@ -1,0 +1,459 @@
+import React, { useState } from "react";
+import { motion } from "motion/react";
+import { Search, BookOpen, Headphones, Heart, Clock, Compass, Sparkles, Star, Plus } from "lucide-react";
+import { Book, ReadingProgress, ReadingStats } from "../types";
+
+interface LibraryProps {
+  books: Book[];
+  progresses: ReadingProgress[];
+  favorites: string[];
+  stats: ReadingStats | null;
+  onSelectBook: (book: Book, startInAudioMode: boolean) => void;
+  onToggleFavorite: (bookId: string) => void;
+  onOpenStats: () => void;
+  onOpenProfile: () => void;
+}
+
+export default function Library({
+  books,
+  progresses,
+  favorites,
+  stats,
+  onSelectBook,
+  onToggleFavorite,
+  onOpenStats,
+  onOpenProfile,
+}: LibraryProps) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Todas");
+  const [selectedLanguage, setSelectedLanguage] = useState("Todos");
+
+  // Get list of categories and languages
+  const categories = ["Todas", ...Array.from(new Set(books.map((b) => b.category)))];
+  const languages = ["Todos", ...Array.from(new Set(books.map((b) => b.language).filter(Boolean)))];
+
+  // Filter books
+  const filteredBooks = books.filter((book) => {
+    const matchesSearch =
+      book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      book.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === "Todas" || book.category === selectedCategory;
+    const matchesLanguage = selectedLanguage === "Todos" || book.language === selectedLanguage;
+    return matchesSearch && matchesCategory && matchesLanguage;
+  });
+
+  // Find books currently in progress (lastPage > 0 or progressPercentage > 0, but not fully read)
+  const inProgressList = progresses
+    .map((p) => {
+      const book = books.find((b) => b.id === p.bookId);
+      return { book, progress: p };
+    })
+    .filter((item) => item.book && item.progress.progressPercentage < 100);
+
+  // Find favorited books
+  const favoriteBooks = books.filter((b) => favorites.includes(b.id));
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 font-sans selection:bg-[#e2b874]/30">
+      {/* Search Header Banner */}
+      <div className="mb-10 text-center max-w-2xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-xs text-[#e2b874] font-semibold mb-3"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Descubra Novas Leituras
+        </motion.div>
+        
+        <h1 className="text-3xl sm:text-4xl font-serif font-bold text-zinc-100 tracking-tight">
+          Sua Biblioteca Universo
+        </h1>
+        <p className="text-sm text-zinc-400 mt-1.5 max-w-md mx-auto">
+          Explore clássicos imortais, ouça audiobooks sincronizados e gerencie seu progresso com suporte de inteligência artificial.
+        </p>
+
+        {/* Search input bar */}
+        <div className="mt-6 relative max-w-md mx-auto">
+          <Search className="absolute left-4 top-3.5 w-5 h-5 text-[#e2b874]" />
+          <input
+            type="text"
+            placeholder="Pesquisar por título, autor ou assunto..."
+            className="w-full bg-zinc-900 hover:bg-zinc-800 focus:bg-zinc-800 border border-zinc-800 focus:border-[#e2b874] text-zinc-100 rounded-2xl py-3 pl-12 pr-4 text-sm outline-none transition shadow-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Categories and Languages chips filters */}
+      <div className="mb-8 space-y-4">
+        <div>
+          <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1.5">Filtrar por Categoria</span>
+          <div className="overflow-x-auto whitespace-nowrap scrollbar-none py-1 flex gap-2">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                className={`px-4 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition ${
+                  selectedCategory === cat
+                    ? "bg-[#e2b874] text-zinc-950 border-[#e2b874] font-bold shadow-md shadow-[#e2b874]/10"
+                    : "bg-zinc-900/60 text-zinc-400 border-zinc-850 hover:bg-zinc-800 hover:text-zinc-100"
+                }`}
+                onClick={() => setSelectedCategory(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {languages.length > 1 && (
+          <div>
+            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1.5">Filtrar por Idioma</span>
+            <div className="overflow-x-auto whitespace-nowrap scrollbar-none py-1 flex gap-2">
+              {languages.map((lang) => (
+                <button
+                  key={lang}
+                  className={`px-4 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition ${
+                    selectedLanguage === lang
+                      ? "bg-zinc-100 text-zinc-950 border-zinc-100 font-bold"
+                      : "bg-zinc-900/60 text-[#a1a1aa] border-zinc-850 hover:bg-zinc-800 hover:text-zinc-100"
+                  }`}
+                  onClick={() => setSelectedLanguage(lang)}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Grid containing In Progress (Continue Lendo) shelf */}
+      {inProgressList.length > 0 && (
+        <div className="mb-10">
+          <h2 className="text-xl font-serif font-bold text-zinc-100 mb-4 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-[#e2b874]" />
+            Continuar Lendo
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {inProgressList.map(({ book, progress }) => {
+              if (!book) return null;
+              return (
+                <motion.div
+                  key={book.id}
+                  whileHover={{ y: -2 }}
+                  className="bg-[#121214] border border-zinc-800 rounded-2xl p-4 flex gap-4 shadow-md relative overflow-hidden"
+                >
+                  {/* Miniature Cover */}
+                  <div
+                    className="w-20 h-28 flex-shrink-0 bg-zinc-900 rounded-xl overflow-hidden shadow-sm border border-zinc-800 cursor-pointer"
+                    onClick={() => onSelectBook(book, false)}
+                  >
+                    <img
+                      src={book.coverUrl}
+                      alt={book.title}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-grow flex flex-col justify-between min-w-0">
+                    <div>
+                      <div className="flex justify-between items-start gap-2">
+                        <h3
+                          className="font-serif font-bold text-base text-zinc-100 hover:text-[#e2b874] cursor-pointer truncate"
+                          onClick={() => onSelectBook(book, false)}
+                        >
+                          {book.title}
+                        </h3>
+                        <span className="text-[10px] bg-zinc-900 border border-zinc-800 text-[#e2b874] font-bold px-1.5 py-0.5 rounded-md">
+                          Pág {progress.lastPage + 1}/{book.pages}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 truncate">{book.author}</p>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="my-2">
+                      <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
+                        <span>Progresso de leitura</span>
+                        <span>{progress.progressPercentage}%</span>
+                      </div>
+                      <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-[#e2b874] h-full transition-all duration-300"
+                          style={{ width: `${progress.progressPercentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Quick Access Actions */}
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        onClick={() => onSelectBook(book, false)}
+                        className="flex-1 bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        Ler PDF
+                      </button>
+                      {book.audiobookAvailable && (
+                        <button
+                          onClick={() => onSelectBook(book, true)}
+                          className="flex-grow-0 bg-zinc-900 hover:bg-zinc-855 border border-zinc-800 text-zinc-200 text-[11px] font-semibold py-1.5 px-2.5 rounded-lg flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                        >
+                          <Headphones className="w-3.5 h-3.5 text-[#e2b874]" />
+                          Ouvir
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main Grid: Recommended & Featured Books */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Left 3 columns: Catalog Grid */}
+        <div className="lg:col-span-3">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-serif font-bold text-zinc-100 flex items-center gap-2">
+              <Compass className="w-6 h-6 text-[#e2b874]" />
+              Catálogo de Livros ({filteredBooks.length})
+            </h2>
+          </div>
+
+          {filteredBooks.length === 0 ? (
+            <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-12 text-center">
+              <p className="text-sm text-zinc-400 mb-2">Nenhum livro corresponde à sua busca ou categoria.</p>
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedCategory("Todas");
+                }}
+                className="text-xs text-[#e2b874] hover:underline font-semibold"
+              >
+                Limpar filtros e pesquisar novamente
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+              {filteredBooks.map((book) => {
+                const isFav = favorites.includes(book.id);
+                const bookProg = progresses.find((p) => p.bookId === book.id);
+
+                return (
+                  <motion.div
+                    key={book.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.3 }}
+                    className="group bg-[#121214] border border-zinc-800 hover:border-[#e2b874]/50 rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition flex flex-col h-full relative"
+                  >
+                    {/* Cover Frame */}
+                    <div className="aspect-[3/4] relative bg-zinc-900 overflow-hidden border-b border-zinc-800">
+                      <img
+                        src={book.coverUrl}
+                        alt={book.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                      
+                      {/* Floating actions */}
+                      <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFavorite(book.id);
+                          }}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center border shadow-sm cursor-pointer transition active:scale-90 ${
+                            isFav
+                              ? "bg-[#e2b874] border-[#e2b874] text-zinc-950"
+                              : "bg-black/80 border-zinc-800 text-[#e2b874] hover:bg-zinc-900"
+                          }`}
+                        >
+                          <Heart className={`w-4 h-4 ${isFav ? "fill-zinc-950" : ""}`} />
+                        </button>
+                      </div>
+
+                      {/* Audiobook Badge overlay */}
+                      {book.audiobookAvailable && (
+                        <div className="absolute bottom-3 left-3 bg-[#e2b874]/95 backdrop-blur-sm text-zinc-950 px-2 py-1 rounded-lg text-[9px] font-bold flex items-center gap-1 shadow-sm">
+                          <Headphones className="w-3 h-3 animate-pulse" />
+                          AUDIOBOOK
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Book Metadata details */}
+                    <div className="p-4 flex-grow flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="text-[10px] bg-zinc-900 border border-zinc-800 text-[#e2b874] font-semibold px-2 py-0.5 rounded-full">
+                            {book.category}
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            {book.pages} pgs
+                          </span>
+                        </div>
+                        
+                        <h3 className="font-serif font-bold text-base text-zinc-100 group-hover:text-[#e2b874] transition leading-snug line-clamp-1">
+                          {book.title}
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5 mb-2 line-clamp-1">{book.author}</p>
+                        <p className="text-[11px] text-zinc-500 line-clamp-2 leading-relaxed mb-4">
+                          {book.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-zinc-800">
+                        {/* Progress display if started */}
+                        {bookProg && bookProg.progressPercentage > 0 && (
+                          <div className="mb-3">
+                            <div className="flex justify-between text-[9px] text-zinc-500 mb-0.5">
+                              <span>Progresso</span>
+                              <span>{bookProg.progressPercentage}%</span>
+                            </div>
+                            <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                              <div
+                                className="bg-[#e2b874] h-full"
+                                style={{ width: `${bookProg.progressPercentage}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => onSelectBook(book, false)}
+                            className="flex-1 bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[10px] sm:text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1 transition active:scale-[0.97] cursor-pointer"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                            Ler
+                          </button>
+                          {book.audiobookAvailable && (
+                            <button
+                              onClick={() => onSelectBook(book, true)}
+                              className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-100 px-3.5 py-2 rounded-xl flex items-center justify-center transition active:scale-[0.97] cursor-pointer"
+                              title="Ouvir Audiobook"
+                            >
+                              <Headphones className="w-3.5 h-3.5 text-[#e2b874]" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right 1 column: User Stats & Personalized recommendations sidebar */}
+        <div className="space-y-6">
+          {/* Quick Stats Bento card */}
+          <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-5 shadow-md">
+            <h3 className="text-base font-serif font-bold text-zinc-100 mb-4 flex items-center gap-2 pb-2 border-b border-zinc-800">
+              <Clock className="w-4.5 h-4.5 text-[#e2b874]" />
+              Seu Desempenho
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+                <p className="text-xs text-zinc-400 font-medium">Tempo Lendo</p>
+                <p className="text-xl font-serif font-bold text-[#e2b874] mt-0.5">
+                  {stats ? `${Math.round(stats.readingMinutes)}m` : "0m"}
+                </p>
+              </div>
+              <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+                <p className="text-xs text-zinc-400 font-medium">Ouvindo Áudio</p>
+                <p className="text-xl font-serif font-bold text-[#e2b874] mt-0.5">
+                  {stats ? `${Math.round(stats.listeningMinutes)}m` : "0m"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2 text-xs">
+              <div className="flex justify-between text-zinc-400">
+                <span>Livros Concluídos:</span>
+                <span className="font-bold text-zinc-200">{stats?.booksCompletedCount || 0}</span>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>Páginas lidas:</span>
+                <span className="font-bold text-zinc-200">{stats?.pagesReadCount || 0} pgs</span>
+              </div>
+            </div>
+
+            <button
+              onClick={onOpenStats}
+              className="w-full mt-4 bg-zinc-900 border border-zinc-800 hover:border-zinc-750 hover:bg-zinc-850 text-[#e2b874] font-bold text-xs py-2 rounded-xl transition cursor-pointer"
+            >
+              Ver Estatísticas Completas
+            </button>
+          </div>
+
+          {/* Favoritos shelf compact */}
+          {favoriteBooks.length > 0 && (
+            <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-5 shadow-md">
+              <h3 className="text-base font-serif font-bold text-zinc-100 mb-3 flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <Heart className="w-4.5 h-4.5 text-[#e2b874] fill-[#e2b874]" />
+                Seus Favoritos ({favoriteBooks.length})
+              </h3>
+              <div className="space-y-3">
+                {favoriteBooks.slice(0, 3).map((fb) => (
+                  <div key={fb.id} className="flex gap-2 items-center">
+                    <img
+                      src={fb.coverUrl}
+                      alt={fb.title}
+                      className="w-9 h-12 object-cover rounded shadow-sm flex-shrink-0 border border-zinc-800"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="min-w-0 flex-grow">
+                      <h4
+                        className="text-xs font-serif font-bold text-zinc-100 hover:text-[#e2b874] truncate cursor-pointer"
+                        onClick={() => onSelectBook(fb, false)}
+                      >
+                        {fb.title}
+                      </h4>
+                      <p className="text-[10px] text-zinc-400 truncate">{fb.author}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI recommendations card */}
+          <div className="bg-gradient-to-br from-amber-500/5 to-transparent border border-zinc-800/80 rounded-2xl p-5 shadow-md relative overflow-hidden">
+            <div className="absolute top-2 right-2 text-[#e2b874]/10">
+              <Sparkles className="w-12 h-12" />
+            </div>
+
+            <h3 className="text-sm font-semibold text-[#e2b874] uppercase tracking-wider flex items-center gap-1.5 mb-2 font-sans">
+              <Star className="w-4 h-4 fill-[#e2b874]" />
+              Dica da IA do BookVerse
+            </h3>
+            
+            <p className="text-xs font-serif italic text-zinc-300 leading-relaxed mb-3">
+              "Para expandir seu pensamento filosófico de forma descontraída, leia **O Pequeno Príncipe** ou aventure-se pelas ironias psicológicas de Machado de Assis em **Dom Casmurro**."
+            </p>
+
+            <div className="text-[10px] text-zinc-500 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-[#e2b874]" />
+              Gerado automaticamente baseado na sua preferência.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
