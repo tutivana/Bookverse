@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { Search, BookOpen, Headphones, Heart, Clock, Compass, Sparkles, Star, Plus } from "lucide-react";
-import { Book, ReadingProgress, ReadingStats } from "../types";
+import { Search, BookOpen, Headphones, Heart, Clock, Compass, Sparkles, Star, Plus, Shield, Lock } from "lucide-react";
+import { Book, ReadingProgress, ReadingStats, User } from "../types";
+import OfflineDownloadButton from "./OfflineDownloadButton";
+import { isUserPremium } from "../lib/subscription";
+import BookDetailModal from "./BookDetailModal";
 
 interface LibraryProps {
   books: Book[];
@@ -12,6 +15,8 @@ interface LibraryProps {
   onToggleFavorite: (bookId: string) => void;
   onOpenStats: () => void;
   onOpenProfile: () => void;
+  user: User | null;
+  onTriggerPaywall: (reason: "audiobook" | "offline" | "premium_book" | "stats" | "highlights") => void;
 }
 
 export default function Library({
@@ -23,7 +28,28 @@ export default function Library({
   onToggleFavorite,
   onOpenStats,
   onOpenProfile,
+  user,
+  onTriggerPaywall
 }: LibraryProps) {
+  const premium = isUserPremium(user);
+  const [selectedDetailBook, setSelectedDetailBook] = useState<Book | null>(null);
+
+  const handleBookClick = (book: Book, startInAudioMode: boolean) => {
+    if (!user) {
+      setSelectedDetailBook(book);
+      return;
+    }
+    if (startInAudioMode && !premium) {
+      onTriggerPaywall("audiobook");
+      return;
+    }
+    if (book.accessType === "premium" && !premium) {
+      onTriggerPaywall("premium_book");
+      return;
+    }
+    onSelectBook(book, startInAudioMode);
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedLanguage, setSelectedLanguage] = useState("Todos");
@@ -34,6 +60,10 @@ export default function Library({
 
   // Filter books
   const filteredBooks = books.filter((book) => {
+    // Only Active books (or un-statused books, which default to Active) are visible to standard users
+    const isActive = book.status === "Active" || !book.status;
+    if (!isActive) return false;
+
     const matchesSearch =
       book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -149,15 +179,30 @@ export default function Library({
                 >
                   {/* Miniature Cover */}
                   <div
-                    className="w-20 h-28 flex-shrink-0 bg-zinc-900 rounded-xl overflow-hidden shadow-sm border border-zinc-800 cursor-pointer"
-                    onClick={() => onSelectBook(book, false)}
+                    className="w-20 h-28 flex-shrink-0 bg-zinc-900 rounded-xl overflow-hidden shadow-sm border border-zinc-800 cursor-pointer relative"
+                    onClick={() => handleBookClick(book, false)}
                   >
                     <img
                       src={book.coverUrl}
                       alt={book.title}
-                      className="w-full h-full object-cover"
+                      className={`w-full h-full object-cover transition duration-350 ${
+                        book.status && book.status !== "Active" ? "grayscale opacity-40 blur-[0.5px]" : ""
+                      }`}
                       referrerPolicy="no-referrer"
                     />
+                    {book.accessType === "premium" && (
+                      <div className="absolute top-1.5 left-1.5 bg-[#e2b874] text-[#09090b] text-[8px] font-black px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-md">
+                        <Sparkles className="w-2 h-2 fill-current" />
+                        <span>PREMIUM</span>
+                      </div>
+                    )}
+                    {book.status && book.status !== "Active" && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="text-[8px] font-bold text-white px-1 py-0.5 rounded bg-zinc-950/80 border border-zinc-700">
+                          {book.status === "Pending Review" ? "REVISÃO" : book.status === "Archived" ? "ARQUIVO" : "INDISP."}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Info */}
@@ -165,14 +210,16 @@ export default function Library({
                     <div>
                       <div className="flex justify-between items-start gap-2">
                         <h3
-                          className="font-serif font-bold text-base text-zinc-100 hover:text-[#e2b874] cursor-pointer truncate"
-                          onClick={() => onSelectBook(book, false)}
+                          className="font-serif font-bold text-base text-zinc-100 hover:text-[#e2b874] cursor-pointer truncate flex-grow min-w-0"
+                          onClick={() => handleBookClick(book, false)}
                         >
                           {book.title}
                         </h3>
-                        <span className="text-[10px] bg-zinc-900 border border-zinc-800 text-[#e2b874] font-bold px-1.5 py-0.5 rounded-md">
-                          Pág {progress.lastPage + 1}/{book.pages}
-                        </span>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className="text-[10px] bg-zinc-900 border border-zinc-800 text-[#e2b874] font-bold px-1.5 py-0.5 rounded-md">
+                            Pág {progress.lastPage + 1}/{book.pages}
+                          </span>
+                        </div>
                       </div>
                       <p className="text-xs text-zinc-400 truncate">{book.author}</p>
                     </div>
@@ -193,21 +240,40 @@ export default function Library({
 
                     {/* Quick Access Actions */}
                     <div className="flex gap-2 mt-1">
-                      <button
-                        onClick={() => onSelectBook(book, false)}
-                        className="flex-1 bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        Ler PDF
-                      </button>
-                      {book.audiobookAvailable && (
+                      {book.status && book.status !== "Active" ? (
                         <button
-                          onClick={() => onSelectBook(book, true)}
-                          className="flex-grow-0 bg-zinc-900 hover:bg-zinc-855 border border-zinc-800 text-zinc-200 text-[11px] font-semibold py-1.5 px-2.5 rounded-lg flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                          disabled
+                          className="flex-1 bg-zinc-900/60 border border-zinc-850 text-zinc-500 text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 cursor-not-allowed"
                         >
-                          <Headphones className="w-3.5 h-3.5 text-[#e2b874]" />
-                          Ouvir
+                          <BookOpen className="w-3.5 h-3.5 text-zinc-600" />
+                          Leitura Indisponível
                         </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleBookClick(book, false)}
+                            className="flex-grow bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                            <span>Ler</span>
+                          </button>
+                          {book.audiobookAvailable && (
+                            <button
+                              onClick={() => handleBookClick(book, true)}
+                              className="w-9 h-9 flex-shrink-0 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-200 rounded-lg flex items-center justify-center transition active:scale-95 cursor-pointer"
+                              title="Ouvir Audiobook"
+                            >
+                              <Headphones className="w-3.5 h-3.5 text-[#e2b874]" />
+                            </button>
+                          )}
+                          <OfflineDownloadButton
+                            book={book}
+                            isPremium={premium}
+                            onTriggerPaywall={() => onTriggerPaywall("offline")}
+                            iconOnly={true}
+                            className="w-9 h-9 flex-shrink-0"
+                          />
+                        </>
                       )}
                     </div>
                   </div>
@@ -259,7 +325,10 @@ export default function Library({
                     className="group bg-[#121214] border border-zinc-800 hover:border-[#e2b874]/50 rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition flex flex-col h-full relative"
                   >
                     {/* Cover Frame */}
-                    <div className="aspect-[3/4] relative bg-zinc-900 overflow-hidden border-b border-zinc-800">
+                    <div
+                      className="aspect-[3/4] relative bg-zinc-900 overflow-hidden border-b border-zinc-800 cursor-pointer"
+                      onClick={() => setSelectedDetailBook(book)}
+                    >
                       <img
                         src={book.coverUrl}
                         alt={book.title}
@@ -267,12 +336,30 @@ export default function Library({
                         referrerPolicy="no-referrer"
                       />
                       
+                      {/* Premium / Free Label overlay */}
+                      <div className="absolute top-3 left-3 flex gap-1 items-center z-10">
+                        {book.accessType === "premium" ? (
+                          <div className="bg-[#e2b874] text-[#09090b] text-[9px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-md">
+                            <Sparkles className="w-2.5 h-2.5 fill-current" />
+                            <span>PREMIUM</span>
+                          </div>
+                        ) : (
+                          <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 text-zinc-400 text-[9px] font-bold px-2 py-0.5 rounded-lg">
+                            GRÁTIS
+                          </div>
+                        )}
+                      </div>
+
                       {/* Floating actions */}
-                      <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+                      <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onToggleFavorite(book.id);
+                            if (!user) {
+                              setSelectedDetailBook(book);
+                            } else {
+                              onToggleFavorite(book.id);
+                            }
                           }}
                           className={`w-8 h-8 rounded-full flex items-center justify-center border shadow-sm cursor-pointer transition active:scale-90 ${
                             isFav
@@ -305,7 +392,10 @@ export default function Library({
                           </span>
                         </div>
                         
-                        <h3 className="font-serif font-bold text-base text-zinc-100 group-hover:text-[#e2b874] transition leading-snug line-clamp-1">
+                        <h3
+                          className="font-serif font-bold text-base text-zinc-100 group-hover:text-[#e2b874] transition leading-snug line-clamp-1 cursor-pointer"
+                          onClick={() => setSelectedDetailBook(book)}
+                        >
                           {book.title}
                         </h3>
                         <p className="text-xs text-zinc-400 mt-0.5 mb-2 line-clamp-1">{book.author}</p>
@@ -331,23 +421,30 @@ export default function Library({
                           </div>
                         )}
 
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-1.5 w-full">
                           <button
-                            onClick={() => onSelectBook(book, false)}
-                            className="flex-1 bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[10px] sm:text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1 transition active:scale-[0.97] cursor-pointer"
+                            onClick={() => handleBookClick(book, false)}
+                            className="flex-1 bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[10px] sm:text-xs font-bold h-10 rounded-xl flex items-center justify-center gap-1 transition active:scale-[0.97] cursor-pointer"
                           >
                             <BookOpen className="w-3.5 h-3.5" />
-                            Ler
+                            <span>Ler</span>
                           </button>
                           {book.audiobookAvailable && (
                             <button
-                              onClick={() => onSelectBook(book, true)}
-                              className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-100 px-3.5 py-2 rounded-xl flex items-center justify-center transition active:scale-[0.97] cursor-pointer"
+                              onClick={() => handleBookClick(book, true)}
+                              className="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-100 rounded-xl flex items-center justify-center transition active:scale-[0.97] cursor-pointer flex-shrink-0"
                               title="Ouvir Audiobook"
                             >
-                              <Headphones className="w-3.5 h-3.5 text-[#e2b874]" />
+                              <Headphones className="w-4 h-4 text-[#e2b874]" />
                             </button>
                           )}
+                          <OfflineDownloadButton
+                            book={book}
+                            isPremium={premium}
+                            onTriggerPaywall={() => onTriggerPaywall("offline")}
+                            iconOnly={true}
+                            className="w-10 h-10 flex-shrink-0"
+                          />
                         </div>
                       </div>
                     </div>
@@ -361,45 +458,70 @@ export default function Library({
         {/* Right 1 column: User Stats & Personalized recommendations sidebar */}
         <div className="space-y-6">
           {/* Quick Stats Bento card */}
-          <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-5 shadow-md">
-            <h3 className="text-base font-serif font-bold text-zinc-100 mb-4 flex items-center gap-2 pb-2 border-b border-zinc-800">
-              <Clock className="w-4.5 h-4.5 text-[#e2b874]" />
-              Seu Desempenho
-            </h3>
+          {!user ? (
+            <div className="bg-gradient-to-br from-[#121214] to-[#0c0c0e] border border-zinc-800 p-5 rounded-2xl shadow-lg relative overflow-hidden text-center space-y-4">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-[#e2b874]/5 rounded-full blur-xl pointer-events-none"></div>
+              
+              <div className="w-10 h-10 bg-amber-500/10 border border-zinc-800 rounded-xl flex items-center justify-center text-[#e2b874] mx-auto">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </div>
 
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                <p className="text-xs text-zinc-400 font-medium">Tempo Lendo</p>
-                <p className="text-xl font-serif font-bold text-[#e2b874] mt-0.5">
-                  {stats ? `${Math.round(stats.readingMinutes)}m` : "0m"}
+              <div className="space-y-1">
+                <h4 className="font-serif font-bold text-sm text-zinc-100">Acompanhe Suas Leituras</h4>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  Crie sua conta gratuita para monitorar seu tempo de leitura, audiobooks ouvidos, páginas lidas e obter recomendações de IA personalizadas!
                 </p>
               </div>
-              <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                <p className="text-xs text-zinc-400 font-medium">Ouvindo Áudio</p>
-                <p className="text-xl font-serif font-bold text-[#e2b874] mt-0.5">
-                  {stats ? `${Math.round(stats.listeningMinutes)}m` : "0m"}
-                </p>
-              </div>
-            </div>
 
-            <div className="mt-4 space-y-2 text-xs">
-              <div className="flex justify-between text-zinc-400">
-                <span>Livros Concluídos:</span>
-                <span className="font-bold text-zinc-200">{stats?.booksCompletedCount || 0}</span>
-              </div>
-              <div className="flex justify-between text-zinc-400">
-                <span>Páginas lidas:</span>
-                <span className="font-bold text-zinc-200">{stats?.pagesReadCount || 0} pgs</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("open-auth", { detail: { mode: "register" } }))}
+                className="w-full bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold text-xs py-2.5 rounded-xl transition cursor-pointer"
+              >
+                Cadastrar-se Grátis
+              </button>
             </div>
+          ) : (
+            <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-5 shadow-md">
+              <h3 className="text-base font-serif font-bold text-zinc-100 mb-4 flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <Clock className="w-4.5 h-4.5 text-[#e2b874]" />
+                Seu Desempenho
+              </h3>
 
-            <button
-              onClick={onOpenStats}
-              className="w-full mt-4 bg-zinc-900 border border-zinc-800 hover:border-zinc-750 hover:bg-zinc-850 text-[#e2b874] font-bold text-xs py-2 rounded-xl transition cursor-pointer"
-            >
-              Ver Estatísticas Completas
-            </button>
-          </div>
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+                  <p className="text-xs text-zinc-400 font-medium">Tempo Lendo</p>
+                  <p className="text-xl font-serif font-bold text-[#e2b874] mt-0.5">
+                    {stats ? `${Math.round(stats.readingMinutes)}m` : "0m"}
+                  </p>
+                </div>
+                <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+                  <p className="text-xs text-zinc-400 font-medium">Ouvindo Áudio</p>
+                  <p className="text-xl font-serif font-bold text-[#e2b874] mt-0.5">
+                    {stats ? `${Math.round(stats.listeningMinutes)}m` : "0m"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2 text-xs">
+                <div className="flex justify-between text-zinc-400">
+                  <span>Livros Concluídos:</span>
+                  <span className="font-bold text-zinc-200">{stats?.booksCompletedCount || 0}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>Páginas lidas:</span>
+                  <span className="font-bold text-zinc-200">{stats?.pagesReadCount || 0} pgs</span>
+                </div>
+              </div>
+
+              <button
+                onClick={onOpenStats}
+                className="w-full mt-4 bg-zinc-900 border border-zinc-800 hover:border-zinc-750 hover:bg-zinc-850 text-[#e2b874] font-bold text-xs py-2 rounded-xl transition cursor-pointer"
+              >
+                Ver Estatísticas Completas
+              </button>
+            </div>
+          )}
 
           {/* Favoritos shelf compact */}
           {favoriteBooks.length > 0 && (
@@ -411,19 +533,38 @@ export default function Library({
               <div className="space-y-3">
                 {favoriteBooks.slice(0, 3).map((fb) => (
                   <div key={fb.id} className="flex gap-2 items-center">
-                    <img
-                      src={fb.coverUrl}
-                      alt={fb.title}
-                      className="w-9 h-12 object-cover rounded shadow-sm flex-shrink-0 border border-zinc-800"
-                      referrerPolicy="no-referrer"
-                    />
+                    <div
+                      className="w-9 h-12 relative flex-shrink-0 bg-zinc-900 rounded overflow-hidden border border-zinc-800 cursor-pointer"
+                      onClick={() => onSelectBook(fb, false)}
+                    >
+                      <img
+                        src={fb.coverUrl}
+                        alt={fb.title}
+                        className={`w-full h-full object-cover ${
+                          fb.status && fb.status !== "Active" ? "grayscale opacity-40" : ""
+                        }`}
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
                     <div className="min-w-0 flex-grow">
-                      <h4
-                        className="text-xs font-serif font-bold text-zinc-100 hover:text-[#e2b874] truncate cursor-pointer"
-                        onClick={() => onSelectBook(fb, false)}
-                      >
-                        {fb.title}
-                      </h4>
+                      <div className="flex items-center gap-1.5 justify-between">
+                        <h4
+                          className="text-xs font-serif font-bold text-zinc-100 hover:text-[#e2b874] truncate cursor-pointer flex-grow"
+                          onClick={() => onSelectBook(fb, false)}
+                        >
+                          {fb.title}
+                        </h4>
+                        {fb.status && fb.status !== "Active" && (
+                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                            fb.status === "Pending Review" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                            fb.status === "Archived" ? "bg-zinc-600/10 text-zinc-400 border-zinc-600/20" :
+                            "bg-red-500/10 text-red-400 border-red-500/20"
+                          }`}>
+                            {fb.status === "Pending Review" ? "Revisão" :
+                             fb.status === "Archived" ? "Arquivado" : "Indisp."}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-zinc-400 truncate">{fb.author}</p>
                     </div>
                   </div>
@@ -454,6 +595,19 @@ export default function Library({
           </div>
         </div>
       </div>
+
+      <BookDetailModal
+        isOpen={selectedDetailBook !== null}
+        onClose={() => setSelectedDetailBook(null)}
+        book={selectedDetailBook}
+        user={user}
+        isFavorite={selectedDetailBook ? favorites.includes(selectedDetailBook.id) : false}
+        onToggleFavorite={onToggleFavorite}
+        onSelectBook={onSelectBook}
+        onTriggerAuth={(mode) => {
+          window.dispatchEvent(new CustomEvent("open-auth", { detail: { mode } }));
+        }}
+      />
     </div>
   );
 }

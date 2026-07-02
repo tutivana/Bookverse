@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account information and profile properties",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["id", "email", "name"]
+    },
+    "Book": {
+      "title": "Book",
+      "description": "Book details and catalog data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "category": { "type": "string" },
+        "pages": { "type": "integer" }
+      },
+      "required": ["id", "title", "author", "category", "pages"]
+    },
+    "ReadingProgress": {
+      "title": "ReadingProgress",
+      "description": "Tracks page progress and audiobook position of a user per book",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bookId": { "type": "string" },
+        "lastPage": { "type": "integer" }
+      },
+      "required": ["userId", "bookId", "lastPage"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile records"
+    },
+    "/users/{userId}/progress/{bookId}": {
+      "schema": "ReadingProgress",
+      "description": "Progress tracking"
+    },
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "Bookmark" },
+      "description": "User bookmarked pages"
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": { "$ref": "HighlightAndNote" },
+      "description": "User annotated book selections"
+    },
+    "/users/{userId}/notifications/{notifId}": {
+      "schema": { "$ref": "BookNotification" },
+      "description": "In-app system and recommendation alerts"
+    },
+    "/users/{userId}/payments/{paymentId}": {
+      "schema": { "$ref": "PaymentHistoryItem" },
+      "description": "User payment records"
+    },
+    "/users/{userId}/stats/main": {
+      "schema": { "$ref": "ReadingStats" },
+      "description": "Summary stats of user reading times"
+    },
+    "/books/{bookId}": {
+      "schema": "Book",
+      "description": "Digital library entries"
+    },
+    "/books/{bookId}/reviews/{reviewId}": {
+      "schema": { "$ref": "Review" },
+      "description": "Book discussion comments and reviews"
+    },
+    "/books/{bookId}/reports/{reportId}": {
+      "schema": { "$ref": "BookReport" },
+      "description": "Moderator content feedback reports"
+    },
+    "/premiumRequests/{requestId}": {
+      "schema": { "$ref": "PremiumRequest" },
+      "description": "Active plan activation requests"
+    },
+    "/logs/{logId}": {
+      "schema": { "$ref": "AdminLog" },
+      "description": "Administrative actions audit history"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "SystemSettings" },
+      "description": "Global prices and system feature switches"
+    }
+  }
+}

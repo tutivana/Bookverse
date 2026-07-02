@@ -13,29 +13,92 @@ import {
   Camera,
   CheckCircle,
   HelpCircle,
-  ChevronDown
+  ChevronDown,
+  Bell,
+  BellOff
 } from "lucide-react";
 
-import { User, Book, ReadingProgress, ReadingStats } from "./types";
-import { fetchBooks, fetchUserStats, saveReadingProgress } from "./lib/api";
+import { User, Book, ReadingProgress, ReadingStats, BookNotification } from "./types";
+import { fetchBooks, fetchUserStats, saveReadingProgress, fetchNotifications, markNotificationsAsRead } from "./lib/api";
+import { isUserPremium } from "./lib/subscription";
 
 import AuthScreen from "./components/AuthScreen";
 import Library from "./components/Library";
+import LandingPage from "./components/LandingPage";
+import BookDetailModal from "./components/BookDetailModal";
 import Reader from "./components/Reader";
 import AudiobookPlayer from "./components/AudiobookPlayer";
 import StatsDashboard from "./components/StatsDashboard";
 import AdminPanel from "./components/AdminPanel";
+import UnavailableBookScreen from "./components/UnavailableBookScreen";
+import UserProfile from "./components/UserProfile";
+import NotificationCenter from "./components/NotificationCenter";
+import PremiumPaywallModal from "./components/PremiumPaywallModal";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [books, setBooks] = useState<Book[]>([]);
   const [progresses, setProgresses] = useState<ReadingProgress[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [stats, setStats] = useState<ReadingStats | null>(null);
   
+  // Notifications state
+  const [notifications, setNotifications] = useState<BookNotification[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  
   // Navigation / Active book state
-  const [currentView, setCurrentView] = useState<"library" | "reader" | "audiobook" | "stats" | "admin">("library");
+  const [currentView, setCurrentView] = useState<"landing" | "auth" | "library" | "reader" | "audiobook" | "stats" | "admin" | "profile">("landing");
   const [activeBook, setActiveBook] = useState<Book | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [selectedGuestBook, setSelectedGuestBook] = useState<Book | null>(null);
+
+  // Check if a book is available to read
+  const isBookAvailable = (book: Book | null): boolean => {
+    if (!book) return false;
+    return !book.status || book.status === "Active";
+  };
+
+  // Poll notifications
+  useEffect(() => {
+    if (!user) return;
+    const loadNotifs = async () => {
+      try {
+        const notifList = await fetchNotifications(user.id);
+        setNotifications(notifList || []);
+      } catch (e) {
+        console.error("Error loading notifications:", e);
+      }
+    };
+    loadNotifs();
+    const interval = setInterval(loadNotifs, 5000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Support deep linking to books on mount
+  useEffect(() => {
+    if (!loading && books.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const bookId = params.get("bookId") || params.get("book") || window.location.hash.replace("#", "");
+      if (bookId) {
+        const found = books.find(b => b.id === bookId);
+        if (found) {
+          setActiveBook(found);
+          setCurrentView("reader");
+        }
+      }
+    }
+  }, [books, loading]);
+
+  const handleMarkNotifsRead = async () => {
+    if (!user) return;
+    try {
+      await markNotificationsAsRead(user.id);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (err) {
+      console.error("Failed to mark notifications as read:", err);
+    }
+  };
   
   // Profile settings dropdown/modal state
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -43,7 +106,14 @@ export default function App() {
   const [editAvatar, setEditAvatar] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
 
-  const [loading, setLoading] = useState(true);
+  // Paywall Modal state
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [paywallReason, setPaywallReason] = useState<"audiobook" | "offline" | "premium_book" | "stats" | "highlights" | "generic">("generic");
+
+  const triggerPaywall = (reason: "audiobook" | "offline" | "premium_book" | "stats" | "highlights" | "generic") => {
+    setPaywallReason(reason);
+    setPaywallOpen(true);
+  };
 
   // Load user session on mount
   useEffect(() => {
@@ -54,32 +124,30 @@ export default function App() {
         setUser(parsed);
         setEditName(parsed.name);
         setEditAvatar(parsed.avatarUrl || "");
+        setCurrentView("library");
       } catch (e) {
         console.error("Stale session found", e);
+        setCurrentView("landing");
       }
     } else {
-      // Auto-login default demo-user for rapid review and seamless onboarding!
-      const demoUser: User = {
-        id: "demo-user",
-        email: "tutojose1@gmail.com",
-        name: "Tuto José",
-        avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop",
-        createdAt: new Date().toISOString(),
-      };
-      setUser(demoUser);
-      setEditName(demoUser.name);
-      setEditAvatar(demoUser.avatarUrl || "");
-      localStorage.setItem("bookverse_user", JSON.stringify(demoUser));
+      setUser(null);
+      setCurrentView("landing");
     }
     setLoading(false);
   }, []);
 
   // Fetch catalog, progress, and statistics whenever the active user changes
   const loadUserData = async () => {
-    if (!user) return;
     try {
       const booksList = await fetchBooks();
-      setBooks(booksList);
+      setBooks(booksList || []);
+
+      if (!user) {
+        setProgresses([]);
+        setFavorites([]);
+        setStats(null);
+        return;
+      }
 
       const statsData = await fetchUserStats(user.id);
       setStats(statsData);
@@ -105,10 +173,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (user) {
-      loadUserData();
-    }
+    loadUserData();
   }, [user]);
+
+  // Listen to open-auth events from guest components
+  useEffect(() => {
+    const handleOpenAuth = (e: Event) => {
+      const customEvent = e as CustomEvent<{ mode?: "login" | "register" }>;
+      const mode = customEvent.detail?.mode || "login";
+      setAuthMode(mode);
+      setCurrentView("auth");
+    };
+    window.addEventListener("open-auth", handleOpenAuth);
+    return () => {
+      window.removeEventListener("open-auth", handleOpenAuth);
+    };
+  }, []);
 
   const handleAuthSuccess = (authenticatedUser: User) => {
     setUser(authenticatedUser);
@@ -122,7 +202,7 @@ export default function App() {
     localStorage.removeItem("bookverse_user");
     setUser(null);
     setActiveBook(null);
-    setCurrentView("library");
+    setCurrentView("landing");
   };
 
   const handleToggleFavorite = (bookId: string) => {
@@ -139,15 +219,24 @@ export default function App() {
   };
 
   const handleSelectBook = (book: Book, startInAudioMode: boolean) => {
+    const isPremium = isUserPremium(user);
+    if (startInAudioMode && !isPremium) {
+      triggerPaywall("audiobook");
+      return;
+    }
+    if (book.accessType === "premium" && !isPremium) {
+      triggerPaywall("premium_book");
+      return;
+    }
     setActiveBook(book);
     setCurrentView(startInAudioMode ? "audiobook" : "reader");
   };
 
   // Sync Reading position trigger
-  const handleUpdateReadingProgress = async (page: number) => {
+  const handleUpdateReadingProgress = async (page: number, readingSeconds?: number) => {
     if (!user || !activeBook) return;
     try {
-      const updatedProgress = await saveReadingProgress(user.id, activeBook.id, page);
+      const updatedProgress = await saveReadingProgress(user.id, activeBook.id, page, undefined, readingSeconds);
       
       // Update local progresses state list
       setProgresses((prev) => {
@@ -181,37 +270,6 @@ export default function App() {
     fetchUserStats(user!.id).then(setStats).catch(console.error);
   };
 
-  // Profile update save
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    setProfileSuccess("");
-
-    try {
-      const res = await fetch("/api/auth/update-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          name: editName,
-          avatarUrl: editAvatar,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao atualizar perfil");
-
-      setUser(data.user);
-      localStorage.setItem("bookverse_user", JSON.stringify(data.user));
-      setProfileSuccess("Perfil atualizado com sucesso!");
-      setTimeout(() => {
-        setIsProfileOpen(false);
-        setProfileSuccess("");
-      }, 1500);
-    } catch (err: any) {
-      alert("Erro: " + err.message);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center font-sans">
@@ -221,14 +279,67 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  if (currentView === "landing") {
+    return (
+      <>
+        <LandingPage
+          onNavigateToAuth={(mode) => {
+            setAuthMode(mode);
+            setCurrentView("auth");
+          }}
+          onExploreCatalog={() => {
+            setCurrentView("library");
+          }}
+          onSelectBookGuest={(book) => {
+            setSelectedGuestBook(book);
+          }}
+        />
+        {selectedGuestBook && (
+          <BookDetailModal
+            isOpen={selectedGuestBook !== null}
+            onClose={() => setSelectedGuestBook(null)}
+            book={selectedGuestBook}
+            user={user}
+            isFavorite={false}
+            onToggleFavorite={() => {
+              setSelectedGuestBook(null);
+              setAuthMode("login");
+              setCurrentView("auth");
+            }}
+            onSelectBook={() => {
+              setSelectedGuestBook(null);
+              setAuthMode("login");
+              setCurrentView("auth");
+            }}
+            onTriggerAuth={(mode) => {
+              setSelectedGuestBook(null);
+              setAuthMode(mode);
+              setCurrentView("auth");
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (currentView === "auth") {
+    return (
+      <AuthScreen
+        onAuthSuccess={handleAuthSuccess}
+        defaultIsLogin={authMode === "login"}
+        onBackToLanding={() => {
+          setCurrentView("landing");
+        }}
+      />
+    );
   }
 
   // Get reading active book progress
   const activeBookProgress = activeBook
     ? progresses.find((p) => p.bookId === activeBook.id) || null
     : null;
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#09090b] font-sans text-zinc-100 selection:bg-[#e2b874]/30">
@@ -251,20 +362,22 @@ export default function App() {
           </div>
 
           {/* Core horizontal links */}
-          <nav className="flex items-center gap-1 sm:gap-4 text-xs font-semibold">
+          <nav className="flex items-center gap-0.5 sm:gap-2 text-xs font-semibold overflow-x-auto no-scrollbar max-w-[50%] md:max-w-none">
+            {/* Public Area Links */}
             <button
               onClick={() => {
                 setCurrentView("library");
                 setIsProfileOpen(false);
               }}
-              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 currentView === "library"
                   ? "bg-[#e2b874]/10 text-[#e2b874]"
                   : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
               }`}
+              title="Biblioteca"
             >
               <LibraryIcon className="w-4 h-4" />
-              <span>Biblioteca</span>
+              <span className={currentView === "library" ? "inline" : "hidden md:inline"}>Biblioteca</span>
             </button>
 
             {activeBook && (
@@ -273,64 +386,143 @@ export default function App() {
                   setCurrentView("reader");
                   setIsProfileOpen(false);
                 }}
-                className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   currentView === "reader" || currentView === "audiobook"
                     ? "bg-[#e2b874]/10 text-[#e2b874]"
                     : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                 }`}
+                title={`Lendo: ${activeBook.title}`}
               >
                 <BookOpen className="w-4 h-4 animate-pulse" />
-                <span className="hidden sm:inline">Lendo:</span>
-                <span className="max-w-[80px] sm:max-w-[120px] truncate font-serif font-bold text-[#e2b874]">{activeBook.title}</span>
+                <span className={currentView === "reader" || currentView === "audiobook" ? "inline text-xs" : "hidden md:inline text-xs"}>
+                  <span className="hidden sm:inline">Lendo: </span>
+                  <span className="max-w-[45px] sm:max-w-[120px] inline-block truncate align-bottom font-serif font-bold text-[#e2b874]">{activeBook.title}</span>
+                </span>
               </button>
             )}
 
-            <button
-              onClick={() => {
-                setCurrentView("stats");
-                setIsProfileOpen(false);
-              }}
-              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-                currentView === "stats"
-                  ? "bg-[#e2b874]/10 text-[#e2b874]"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span>Estatísticas</span>
-            </button>
+            {user && (
+              <button
+                onClick={() => {
+                  setCurrentView("stats");
+                  setIsProfileOpen(false);
+                }}
+                className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  currentView === "stats"
+                    ? "bg-[#e2b874]/10 text-[#e2b874]"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                }`}
+                title="Estatísticas"
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span className={currentView === "stats" ? "inline" : "hidden md:inline"}>Estatísticas</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                setCurrentView("admin");
-                setIsProfileOpen(false);
-              }}
-              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-                currentView === "admin"
-                  ? "bg-[#e2b874]/10 text-[#e2b874]"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span>Painel Admin</span>
-            </button>
+            {/* Separator and Admin Area Link */}
+            {user && (user.role === "Super Administrador" || user.role === "Administrador" || user.role === "Moderador") && (
+              <>
+                <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0 self-center" />
+                <button
+                  onClick={() => {
+                    setCurrentView("admin");
+                    setIsProfileOpen(false);
+                  }}
+                  className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    currentView === "admin"
+                      ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                  }`}
+                  title="Painel Admin"
+                >
+                  <Settings className="w-4 h-4 text-amber-500" />
+                  <span className={currentView === "admin" ? "inline text-amber-500" : "hidden md:inline"}>Admin</span>
+                </button>
+              </>
+            )}
           </nav>
 
           {/* Right User actions */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsProfileOpen(!isProfileOpen)}
-              className="flex items-center gap-2 hover:bg-zinc-800 p-1.5 rounded-xl border border-zinc-800 bg-zinc-900 transition cursor-pointer"
-            >
-              <img
-                src={user.avatarUrl || "https://api.dicebear.com/7.x/adventurer/svg"}
-                alt={user.name}
-                className="w-7 h-7 rounded-lg border border-zinc-800 object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <span className="text-xs font-bold text-zinc-100 max-w-[80px] truncate hidden sm:inline">{user.name}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-zinc-400 hidden sm:inline" />
-            </button>
+          <div className="flex items-center gap-3 relative">
+            {user ? (
+              <>
+                {/* Notification Bell */}
+                <div>
+                  <button
+                    onClick={() => setIsNotifOpen(true)}
+                    className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl relative transition cursor-pointer flex items-center justify-center shadow-lg hover:border-zinc-700 hover:text-zinc-100"
+                    title="Notificações"
+                  >
+                    <Bell className="w-4 h-4" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-zinc-900 animate-pulse">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Profile Dropdown Trigger */}
+                <button
+                  onClick={() => setCurrentView("profile")}
+                  className={`flex items-center gap-2 p-1.5 rounded-xl border transition cursor-pointer ${
+                    currentView === "profile"
+                      ? "bg-[#e2b874]/10 border-[#e2b874] text-[#e2b874]"
+                      : "hover:bg-zinc-800 border-zinc-800 bg-zinc-900 text-zinc-100"
+                  }`}
+                >
+                  <div className="relative">
+                    <img
+                      src={user.avatarUrl || "https://api.dicebear.com/7.x/adventurer/svg"}
+                      alt={user.name}
+                      className="w-7 h-7 rounded-lg border border-zinc-800 object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    {(user.role === "Super Administrador" || user.role === "Administrador") && (
+                      <span className="absolute -top-1 -right-1 bg-amber-500 w-2.5 h-2.5 rounded-full border border-zinc-900 shadow-[0_0_6px_#f59e0b] animate-pulse" title="Administrador" />
+                    )}
+                  </div>
+                  <div className="flex flex-col items-start leading-tight">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-zinc-100 max-w-[80px] truncate hidden sm:inline">{user.name}</span>
+                      {(user.role === "Super Administrador" || user.role === "Administrador") && (
+                        <span className="text-[8px] bg-amber-500/10 text-amber-400 border border-amber-500/30 font-bold px-1 py-0.5 rounded uppercase font-mono tracking-wider scale-90 hidden sm:inline-block">
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 hidden sm:inline" />
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentView("landing")}
+                  className="text-xs font-bold text-zinc-400 hover:text-zinc-200 transition px-2.5 py-2 cursor-pointer hidden md:inline-block"
+                >
+                  Voltar ao Início
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthMode("login");
+                    setCurrentView("auth");
+                  }}
+                  className="text-xs font-bold text-zinc-400 hover:text-[#e2b874] transition px-3 py-2 cursor-pointer"
+                >
+                  Entrar
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthMode("register");
+                    setCurrentView("auth");
+                  }}
+                  className="bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold text-xs px-4 py-2 rounded-xl transition active:scale-95 cursor-pointer shadow-md"
+                >
+                  Criar Conta
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -355,21 +547,31 @@ export default function App() {
                 onToggleFavorite={handleToggleFavorite}
                 onOpenStats={() => setCurrentView("stats")}
                 onOpenProfile={() => setIsProfileOpen(true)}
+                user={user}
+                onTriggerPaywall={triggerPaywall}
               />
             )}
 
-            {currentView === "reader" && activeBook && (
+            {currentView === "reader" && activeBook && isBookAvailable(activeBook) && (
               <Reader
                 book={activeBook}
                 userId={user.id}
+                user={user}
                 onBackToLibrary={() => setCurrentView("library")}
-                onOpenAudiobook={() => setCurrentView("audiobook")}
+                onOpenAudiobook={() => {
+                  if (isUserPremium(user)) {
+                    setCurrentView("audiobook");
+                  } else {
+                    triggerPaywall("audiobook");
+                  }
+                }}
                 onUpdateProgress={handleUpdateReadingProgress}
                 progress={activeBookProgress}
+                onTriggerPaywall={triggerPaywall}
               />
             )}
 
-            {currentView === "audiobook" && activeBook && (
+            {currentView === "audiobook" && activeBook && isBookAvailable(activeBook) && (
               <AudiobookPlayer
                 book={activeBook}
                 userId={user.id}
@@ -380,6 +582,16 @@ export default function App() {
               />
             )}
 
+            {(currentView === "reader" || currentView === "audiobook") && activeBook && !isBookAvailable(activeBook) && (
+              <UnavailableBookScreen
+                book={activeBook}
+                onBackToLibrary={() => {
+                  setCurrentView("library");
+                  setActiveBook(null);
+                }}
+              />
+            )}
+
             {currentView === "stats" && (
               <StatsDashboard
                 stats={stats}
@@ -387,6 +599,8 @@ export default function App() {
                 books={books}
                 onBackToLibrary={() => setCurrentView("library")}
                 onSelectBook={handleSelectBook}
+                user={user}
+                onTriggerPaywall={triggerPaywall}
               />
             )}
 
@@ -395,105 +609,68 @@ export default function App() {
                 books={books}
                 onBackToLibrary={() => setCurrentView("library")}
                 onRefreshBooks={loadUserData}
+                currentUser={user}
+              />
+            )}
+
+            {currentView === "profile" && (
+              <UserProfile
+                user={user}
+                stats={stats}
+                progresses={progresses}
+                books={books}
+                favorites={favorites}
+                notificationsCount={notifications.filter((n) => !n.read).length}
+                onUpdateUser={(updatedUser) => setUser(updatedUser)}
+                onLogout={handleLogout}
+                onViewChange={(view) => setCurrentView(view)}
+                onSelectBook={handleSelectBook}
               />
             )}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      {/* Profile Settings slide-over overlay modal */}
-      <AnimatePresence>
-        {isProfileOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-end p-0">
-            {/* Click backdrop to close */}
-            <div className="absolute inset-0" onClick={() => setIsProfileOpen(false)} />
+      {user && (
+        <>
+          <NotificationCenter
+            userId={user.id}
+            isOpen={isNotifOpen}
+            onClose={() => setIsNotifOpen(false)}
+            onNavigate={(destinationLink, bookId) => {
+              if (!destinationLink) return;
+              if (destinationLink.startsWith("reader:") && bookId) {
+                const foundBook = books.find((b) => b.id === bookId);
+                if (foundBook) {
+                  handleSelectBook(foundBook, false);
+                }
+              } else if (destinationLink === "settings" || destinationLink === "profile") {
+                setCurrentView("profile");
+              } else if (destinationLink === "stats") {
+                setCurrentView("stats");
+              } else if (destinationLink === "library") {
+                setCurrentView("library");
+              } else if (destinationLink === "admin") {
+                setCurrentView("admin");
+              }
+            }}
+            onUpdateCount={(count) => {
+              // Unread count synced via NotificationCenter's onUpdateCount
+            }}
+          />
 
-            <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="w-full max-w-sm bg-[#121214] border-l border-zinc-800 h-full shadow-2xl relative z-10 p-6 flex flex-col justify-between"
-            >
-              {/* Profile head */}
-              <div className="space-y-6">
-                <div className="flex justify-between items-center pb-4 border-b border-zinc-800">
-                  <h3 className="font-serif font-bold text-zinc-100 text-lg">Seu Perfil</h3>
-                  <button
-                    onClick={() => setIsProfileOpen(false)}
-                    className="text-xs text-zinc-400 hover:text-zinc-200 font-bold cursor-pointer"
-                  >
-                    Fechar
-                  </button>
-                </div>
-
-                {profileSuccess && (
-                  <div className="p-3 bg-emerald-950/40 border border-emerald-800/40 text-emerald-300 text-xs rounded-xl flex items-center gap-1.5">
-                    <CheckCircle className="w-4 h-4" />
-                    {profileSuccess}
-                  </div>
-                )}
-
-                {/* Profile form */}
-                <form onSubmit={handleSaveProfile} className="space-y-5 text-xs">
-                  {/* Photo avatar editor */}
-                  <div className="flex flex-col items-center space-y-2">
-                    <div className="w-20 h-20 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden relative shadow-inner group">
-                      <img
-                        src={editAvatar || "https://api.dicebear.com/7.x/adventurer/svg"}
-                        alt="Avatar Preview"
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                    <span className="text-[10px] text-zinc-400 font-bold text-center">Foto gerada baseada na sua conta</span>
-                  </div>
-
-                  {/* Name field */}
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-zinc-400 uppercase tracking-wider">Nome de Leitor</label>
-                    <input
-                      type="text"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-3.5 text-xs outline-none focus:bg-zinc-800 focus:ring-1 focus:ring-[#e2b874] font-bold text-zinc-100"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Email block */}
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-zinc-400 uppercase tracking-wider">E-mail Cadastrado</label>
-                    <input
-                      type="email"
-                      disabled
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-3.5 text-xs text-zinc-500 font-medium cursor-not-allowed"
-                      value={user.email}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 py-3 rounded-xl font-bold transition shadow-sm active:scale-[0.98] cursor-pointer"
-                  >
-                    Salvar Alterações
-                  </button>
-                </form>
-              </div>
-
-              {/* Logout panel */}
-              <div className="pt-6 border-t border-zinc-800">
-                <button
-                  onClick={handleLogout}
-                  className="w-full bg-red-950/30 hover:bg-red-900/40 border border-red-900/30 text-red-400 font-bold py-3.5 rounded-xl text-xs flex items-center justify-center gap-2 transition active:scale-[0.98] cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sair do BookVerse
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+          <PremiumPaywallModal
+            isOpen={paywallOpen}
+            onClose={() => setPaywallOpen(false)}
+            userId={user.id}
+            onSuccess={(updatedUser) => {
+              setUser(updatedUser);
+              localStorage.setItem("bookverse_user", JSON.stringify(updatedUser));
+            }}
+            initialReason={paywallReason}
+          />
+        </>
+      )}
     </div>
   );
 }

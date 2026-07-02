@@ -1,15 +1,21 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { BookOpen, Key, Mail, User, ArrowRight, ShieldCheck, HelpCircle } from "lucide-react";
 import { User as UserType } from "../types";
 
 interface AuthScreenProps {
   onAuthSuccess: (user: UserType) => void;
+  defaultIsLogin?: boolean;
+  onBackToLanding?: () => void;
 }
 
-export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
-  const [isLogin, setIsLogin] = useState(true);
+export default function AuthScreen({ onAuthSuccess, defaultIsLogin = true, onBackToLanding }: AuthScreenProps) {
+  const [isLogin, setIsLogin] = useState(defaultIsLogin);
   const [isForgot, setIsForgot] = useState(false);
+
+  useEffect(() => {
+    setIsLogin(defaultIsLogin);
+  }, [defaultIsLogin]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("tutojose1@gmail.com"); // default for testing convenience
   const [password, setPassword] = useState("123456"); // default for testing convenience
@@ -246,9 +252,19 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             </>
           )}
 
-          <div className="flex items-center gap-1.5 text-zinc-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Ambiente Seguro RLS</span>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            {onBackToLanding && (
+              <button
+                onClick={onBackToLanding}
+                className="text-zinc-500 hover:text-zinc-300 font-medium hover:underline cursor-pointer transition mr-2"
+              >
+                Voltar ao Início
+              </button>
+            )}
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Ambiente Seguro RLS</span>
+            </div>
           </div>
         </div>
       </motion.div>

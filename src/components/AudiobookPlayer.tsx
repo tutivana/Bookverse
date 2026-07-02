@@ -16,7 +16,8 @@ import {
   Zap,
   ArrowRight,
   Gauge,
-  Sparkle
+  Sparkle,
+  AlertCircle
 } from "lucide-react";
 import { Book, ReadingProgress } from "../types";
 import { saveAudioListeningTime, saveReadingProgress, generateGeminiTTS } from "../lib/api";
@@ -44,20 +45,15 @@ export default function AudiobookPlayer({
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
-  const [readAloudEnabled, setReadAloudEnabled] = useState(true); // Toggle SpeechSynthesis
-  const [offlineDownloaded, setOfflineDownloaded] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [readAloudEnabled, setReadAloudEnabled] = useState(true); // Toggle Gemini Narrator
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [isUsingLocalFallback, setIsUsingLocalFallback] = useState(false);
+  const [quotaError, setQuotaError] = useState(false);
 
   // Gemini TTS states
-  const [ttsMode, setTtsMode] = useState<"browser" | "gemini">("gemini");
   const [geminiVoice, setGeminiVoice] = useState<string>("Kore");
   const [isTtsLoading, setIsTtsLoading] = useState(false);
   const [ttsFeedback, setTtsFeedback] = useState<string>("");
-
-  // Speech synthesis refs
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const [speechActive, setSpeechActive] = useState(false);
-  const [spokenWordIndex, setSpokenWordIndex] = useState(-1);
 
   // Gemini Audio nodes refs
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -66,6 +62,7 @@ export default function AudiobookPlayer({
   const audioStartedTimeRef = useRef<number>(0);
   const audioPauseOffsetRef = useRef<number>(0);
   const currentTextRef = useRef<string>("");
+  const isLocalSpeakingRef = useRef<boolean>(false);
 
   // Audiobook chapters estimation
   const chapters = book.audioChapters || [
@@ -91,7 +88,7 @@ export default function AudiobookPlayer({
   // Handle active audio timer ticker
   useEffect(() => {
     let interval: any;
-    if (isPlaying && !speechActive && !isTtsLoading) {
+    if (isPlaying && !isTtsLoading) {
       interval = setInterval(() => {
         setCurrentTime((prev) => {
           if (prev >= totalDuration) {
@@ -112,14 +109,11 @@ export default function AudiobookPlayer({
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, speechActive, isTtsLoading, playbackSpeed, totalDuration, activeChapterIndex]);
+  }, [isPlaying, isTtsLoading, playbackSpeed, totalDuration, activeChapterIndex]);
 
-  // Clean up speech synthesis & Web Audio when component unmounts
+  // Clean up Web Audio when component unmounts
   useEffect(() => {
     return () => {
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
       stopGeminiAudio();
       if (audioCtxRef.current) {
         audioCtxRef.current.close().catch(console.error);
@@ -130,18 +124,24 @@ export default function AudiobookPlayer({
 
   // Hot-reload Gemini TTS when speed or voice is updated during active playback
   useEffect(() => {
-    if (isPlaying && ttsMode === "gemini" && audioBufferRef.current) {
+    if (isPlaying && audioBufferRef.current) {
       const activeText = book.pdfContent[chapters[activeChapterIndex]?.startPage || 0] || "";
       playGeminiTTS(activeText, true);
     }
   }, [playbackSpeed, geminiVoice]);
 
+
+
   const stopGeminiAudio = () => {
+    isLocalSpeakingRef.current = false;
     if (audioSourceRef.current) {
       try {
         audioSourceRef.current.stop();
       } catch (e) {}
       audioSourceRef.current = null;
+    }
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
     }
   };
 
@@ -204,11 +204,61 @@ export default function AudiobookPlayer({
     };
   };
 
+  const playBrowserFallbackTTS = (text: string) => {
+    if (!("speechSynthesis" in window)) {
+      setTtsFeedback("A síntese de voz local não é suportada neste navegador.");
+      return;
+    }
+
+    isLocalSpeakingRef.current = false;
+    window.speechSynthesis.cancel(); // Reset previous speeches
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "pt-BR";
+    utterance.rate = playbackSpeed;
+    utterance.volume = isMuted ? 0 : volume;
+
+    utterance.onend = () => {
+      if (!isLocalSpeakingRef.current) return;
+      isLocalSpeakingRef.current = false;
+      
+      // Auto advance to next chapter page
+      if (activeChapterIndex < chapters.length - 1) {
+        const nextChapterSeconds = chapters.slice(0, activeChapterIndex + 1).reduce((acc, c) => acc + c.durationSeconds, 0);
+        setCurrentTime(nextChapterSeconds + 1);
+        setActiveChapterIndex((prev) => prev + 1);
+        
+        // Auto play next page text
+        setTimeout(() => {
+          const nextText = book.pdfContent[chapters[activeChapterIndex + 1]?.startPage || 0] || "";
+          if (nextText) {
+            playBrowserFallbackTTS(nextText);
+          }
+        }, 600);
+      } else {
+        setIsPlaying(false);
+      }
+    };
+
+    utterance.onerror = (e) => {
+      isLocalSpeakingRef.current = false;
+      if (e.error === "interrupted" || e.error === "canceled") {
+        return;
+      }
+      console.warn("Speech utterance error:", e.error, e);
+    };
+
+    isLocalSpeakingRef.current = true;
+    window.speechSynthesis.speak(utterance);
+    setIsPlaying(true);
+  };
+
   const playGeminiTTS = async (text: string, forceReload: boolean = false) => {
     if (!text) return;
     
     // If already loaded, just play/resume
     if (!forceReload && audioBufferRef.current && currentTextRef.current === text) {
+      setIsUsingLocalFallback(false);
       playGeminiBuffer(audioBufferRef.current, audioPauseOffsetRef.current);
       return;
     }
@@ -222,10 +272,18 @@ export default function AudiobookPlayer({
 
     try {
       const data = await generateGeminiTTS(text, geminiVoice);
-      if (data.mock) {
-        setTtsFeedback("Modo Demo Offline (Chave não definida): Usando voz local.");
+      if (data.quotaExceeded) {
+        setTtsFeedback("⚠️ Quota do Narrador IA Gemini excedida.");
+        setQuotaError(true);
         setIsTtsLoading(false);
-        speakActivePageText();
+        setIsPlaying(false);
+        return;
+      }
+
+      if (data.mock) {
+        setTtsFeedback("⚠️ Modo Demo Offline (Chave de API não configurada). Narração indisponível.");
+        setIsTtsLoading(false);
+        setIsPlaying(false);
         return;
       }
 
@@ -252,114 +310,41 @@ export default function AudiobookPlayer({
         
         audioBufferRef.current = buffer;
         setIsTtsLoading(false);
+        setIsUsingLocalFallback(false);
         playGeminiBuffer(buffer, 0);
       } else {
         throw new Error("Vazio");
       }
     } catch (err: any) {
-      console.warn("TTS fetch error, falling back to local speech:", err);
+      console.warn("TTS fetch error:", err);
       if (err.message === "QUOTA_EXCEEDED") {
-        setTtsFeedback("Limite de quota da voz IA excedido para este minuto. Ativando sintetizador local para narração contínua.");
-        setTtsMode("browser");
+        setTtsFeedback("⚠️ Quota do Narrador IA Gemini excedida.");
+        setQuotaError(true);
       } else {
-        setTtsFeedback("Incapaz de acessar voz IA. Usando sintetizador local.");
+        setTtsFeedback("⚠️ Narrador IA Gemini temporariamente indisponível.");
       }
       setIsTtsLoading(false);
-      speakActivePageText();
+      setIsPlaying(false);
     }
-  };
-
-  // Speech synthesis controller (TTS)
-  const speakActivePageText = () => {
-    if (!("speechSynthesis" in window)) {
-      alert("A síntese de voz não é suportada neste navegador.");
-      return;
-    }
-
-    window.speechSynthesis.cancel(); // Reset previous speeches
-
-    const activePageText = book.pdfContent[chapters[activeChapterIndex]?.startPage || 0] || "";
-    if (!activePageText) return;
-
-    const utterance = new SpeechSynthesisUtterance(activePageText);
-    utterance.lang = "pt-BR";
-    utterance.rate = playbackSpeed;
-    utterance.volume = isMuted ? 0 : volume;
-
-    // Track spoken word to highlight it
-    utterance.onboundary = (event) => {
-      if (event.name === "word") {
-        setSpokenWordIndex(event.charIndex);
-      }
-    };
-
-    utterance.onend = () => {
-      setSpeechActive(false);
-      setSpokenWordIndex(-1);
-      
-      // Auto advance to next chapter page
-      if (activeChapterIndex < chapters.length - 1) {
-        const nextChapterSeconds = chapters.slice(0, activeChapterIndex + 1).reduce((acc, c) => acc + c.durationSeconds, 0);
-        setCurrentTime(nextChapterSeconds + 1);
-        setActiveChapterIndex((prev) => prev + 1);
-        
-        // Auto play next page
-        setTimeout(() => {
-          if (isPlaying) {
-            speakActivePageText();
-          }
-        }, 600);
-      } else {
-        setIsPlaying(false);
-      }
-    };
-
-    utterance.onerror = (e) => {
-      if (e.error === "interrupted" || e.error === "canceled") {
-        setSpeechActive(false);
-        return;
-      }
-      console.warn("Speech utterance error:", e.error, e);
-      setSpeechActive(false);
-    };
-
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-    setSpeechActive(true);
   };
 
   const handlePlayPause = () => {
     if (isPlaying) {
       setIsPlaying(false);
-      if (ttsMode === "gemini") {
-        stopGeminiAudio();
-        if (audioCtxRef.current) {
-          const elapsed = (audioCtxRef.current.currentTime - audioStartedTimeRef.current) * playbackSpeed;
-          audioPauseOffsetRef.current = Math.min(
-            (audioBufferRef.current?.duration || 0),
-            audioPauseOffsetRef.current + elapsed
-          );
-        }
-      } else {
-        if (speechActive) {
-          window.speechSynthesis.pause();
-          setSpeechActive(false);
-        }
+      stopGeminiAudio();
+      if (audioCtxRef.current) {
+        const elapsed = (audioCtxRef.current.currentTime - audioStartedTimeRef.current) * playbackSpeed;
+        audioPauseOffsetRef.current = Math.min(
+          (audioBufferRef.current?.duration || 0),
+          audioPauseOffsetRef.current + elapsed
+        );
       }
     } else {
       setIsPlaying(true);
       if (readAloudEnabled) {
         const activeText = book.pdfContent[chapters[activeChapterIndex]?.startPage || 0] || "";
-        if (ttsMode === "gemini") {
-          playGeminiTTS(activeText, false);
-        } else {
-          if (window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-            setSpeechActive(true);
-          } else {
-            speakActivePageText();
-          }
-        }
+        // ALWAYS try generating Gemini AI TTS when the user actively clicks Play/Resume
+        playGeminiTTS(activeText, false);
       }
     }
   };
@@ -367,38 +352,22 @@ export default function AudiobookPlayer({
   // Skip time helpers
   const handleSkipForward = () => {
     setCurrentTime((prev) => Math.min(totalDuration, prev + 15));
-    if (ttsMode === "gemini") {
-      stopGeminiAudio();
-      audioPauseOffsetRef.current = Math.min(
-        (audioBufferRef.current?.duration || 0),
-        audioPauseOffsetRef.current + 15
-      );
-      if (isPlaying && audioBufferRef.current) {
-        playGeminiBuffer(audioBufferRef.current, audioPauseOffsetRef.current);
-      }
-    } else {
-      if (speechActive) {
-        window.speechSynthesis.cancel();
-        setSpeechActive(false);
-        setTimeout(speakActivePageText, 100);
-      }
+    stopGeminiAudio();
+    audioPauseOffsetRef.current = Math.min(
+      (audioBufferRef.current?.duration || 0),
+      audioPauseOffsetRef.current + 15
+    );
+    if (isPlaying && audioBufferRef.current) {
+      playGeminiBuffer(audioBufferRef.current, audioPauseOffsetRef.current);
     }
   };
 
   const handleSkipBackward = () => {
     setCurrentTime((prev) => Math.max(0, prev - 15));
-    if (ttsMode === "gemini") {
-      stopGeminiAudio();
-      audioPauseOffsetRef.current = Math.max(0, audioPauseOffsetRef.current - 15);
-      if (isPlaying && audioBufferRef.current) {
-        playGeminiBuffer(audioBufferRef.current, audioPauseOffsetRef.current);
-      }
-    } else {
-      if (speechActive) {
-        window.speechSynthesis.cancel();
-        setSpeechActive(false);
-        setTimeout(speakActivePageText, 100);
-      }
+    stopGeminiAudio();
+    audioPauseOffsetRef.current = Math.max(0, audioPauseOffsetRef.current - 15);
+    if (isPlaying && audioBufferRef.current) {
+      playGeminiBuffer(audioBufferRef.current, audioPauseOffsetRef.current);
     }
   };
 
@@ -406,15 +375,6 @@ export default function AudiobookPlayer({
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  // Download simulation
-  const handleDownloadOffline = () => {
-    setDownloading(true);
-    setTimeout(() => {
-      setOfflineDownloaded(true);
-      setDownloading(false);
-    }, 2000);
   };
 
   return (
@@ -466,31 +426,17 @@ export default function AudiobookPlayer({
               <div className="flex justify-between items-center mb-1.5">
                 <span className="text-[10px] font-bold text-[#e2b874] uppercase flex items-center gap-1">
                   <Zap className="w-3 h-3 text-[#e2b874]" />
-                  Acompanhamento de Texto Sincronizado
+                  Texto em Reprodução
                 </span>
                 <span className="text-[9px] text-zinc-500 font-mono">Página {chapters[activeChapterIndex]?.startPage + 1}</span>
               </div>
               <p className="text-xs font-serif leading-relaxed text-zinc-300 italic">
                 {book.pdfContent[chapters[activeChapterIndex]?.startPage || 0] ? (
-                  <>
-                    {/* Synchronized word highlight renderer */}
-                    {spokenWordIndex !== -1 ? (
-                      <>
-                        {book.pdfContent[chapters[activeChapterIndex].startPage].substring(0, spokenWordIndex)}
-                        <span className="bg-[#e2b874]/30 text-[#e2b874] font-bold px-0.5 rounded">
-                          {book.pdfContent[chapters[activeChapterIndex].startPage].substring(
-                            spokenWordIndex,
-                            book.pdfContent[chapters[activeChapterIndex].startPage].indexOf(" ", spokenWordIndex + 1)
-                          )}
-                        </span>
-                        {book.pdfContent[chapters[activeChapterIndex].startPage].substring(
-                          book.pdfContent[chapters[activeChapterIndex].startPage].indexOf(" ", spokenWordIndex + 1)
-                        )}
-                      </>
-                    ) : (
-                      book.pdfContent[chapters[activeChapterIndex].startPage].substring(0, 180) + "..."
-                    )}
-                  </>
+                  book.pdfContent[chapters[activeChapterIndex].startPage].length > 300 ? (
+                    book.pdfContent[chapters[activeChapterIndex].startPage].substring(0, 300) + "..."
+                  ) : (
+                    book.pdfContent[chapters[activeChapterIndex].startPage]
+                  )
                 ) : (
                   "Sem texto cadastrado para este capítulo."
                 )}
@@ -506,30 +452,6 @@ export default function AudiobookPlayer({
             >
               <BookOpen className="w-4.5 h-4.5" />
               Alternar para Leitura PDF
-            </button>
-
-            <button
-              onClick={handleDownloadOffline}
-              disabled={offlineDownloaded || downloading}
-              className={`border rounded-xl py-3.5 px-4 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer ${
-                offlineDownloaded
-                  ? "bg-emerald-950/40 border-emerald-800/30 text-emerald-300"
-                  : "bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300"
-              }`}
-            >
-              {downloading ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-zinc-650 border-t-zinc-300 rounded-full animate-spin"></span>
-                  Baixando...
-                </>
-              ) : offlineDownloaded ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Disponível Offline
-                </>
-              ) : (
-                "Baixar para Ouvir Offline"
-              )}
             </button>
           </div>
         </div>
@@ -555,30 +477,20 @@ export default function AudiobookPlayer({
                 const targetVal = Number(e.target.value);
                 setCurrentTime(targetVal);
                 
-                if (ttsMode === "gemini") {
-                  stopGeminiAudio();
-                  const startSeconds = chapters.slice(0, activeChapterIndex).reduce((acc, c) => acc + c.durationSeconds, 0);
-                  const elapsedInChapter = targetVal - startSeconds;
-                  const chapterDuration = chapters[activeChapterIndex]?.durationSeconds || 1;
-                  const fraction = Math.max(0, Math.min(1, elapsedInChapter / chapterDuration));
-                  
-                  if (audioBufferRef.current) {
-                    audioPauseOffsetRef.current = fraction * audioBufferRef.current.duration;
-                    if (isPlaying) {
-                      playGeminiBuffer(audioBufferRef.current, audioPauseOffsetRef.current);
-                    }
-                  } else if (isPlaying) {
-                    const activeText = book.pdfContent[chapters[activeChapterIndex]?.startPage || 0] || "";
-                    playGeminiTTS(activeText, true);
+                stopGeminiAudio();
+                const startSeconds = chapters.slice(0, activeChapterIndex).reduce((acc, c) => acc + c.durationSeconds, 0);
+                const elapsedInChapter = targetVal - startSeconds;
+                const chapterDuration = chapters[activeChapterIndex]?.durationSeconds || 1;
+                const fraction = Math.max(0, Math.min(1, elapsedInChapter / chapterDuration));
+                
+                if (audioBufferRef.current) {
+                  audioPauseOffsetRef.current = fraction * audioBufferRef.current.duration;
+                  if (isPlaying) {
+                    playGeminiBuffer(audioBufferRef.current, audioPauseOffsetRef.current);
                   }
-                } else {
-                  if (speechActive) {
-                    window.speechSynthesis.cancel();
-                    setSpeechActive(false);
-                    if (isPlaying) {
-                      setTimeout(speakActivePageText, 100);
-                    }
-                  }
+                } else if (isPlaying) {
+                  const activeText = book.pdfContent[chapters[activeChapterIndex]?.startPage || 0] || "";
+                  playGeminiTTS(activeText, true);
                 }
               }}
               className="w-full h-1.5 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-[#e2b874]"
@@ -598,11 +510,6 @@ export default function AudiobookPlayer({
                   key={speed}
                   onClick={() => {
                     setPlaybackSpeed(speed);
-                    if (ttsMode === "browser" && speechActive) {
-                      window.speechSynthesis.cancel();
-                      setSpeechActive(false);
-                      setTimeout(speakActivePageText, 100);
-                    }
                   }}
                   className={`px-3 py-1.5 transition cursor-pointer ${
                     playbackSpeed === speed ? "bg-[#e2b874] text-zinc-950" : "text-zinc-400 hover:bg-zinc-800"
@@ -677,138 +584,133 @@ export default function AudiobookPlayer({
           </div>
         </div>
 
+        {/* Toggle Button for Voice settings */}
+        <div className="flex justify-center pt-2">
+          <button
+            type="button"
+            onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+            className="text-xs text-zinc-400 hover:text-[#e2b874] flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 transition cursor-pointer border border-zinc-800"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#e2b874]" />
+            {showVoiceSettings ? "Ocultar Ajustes de Narração IA" : "Ajustes de Narração IA e Vozes"}
+          </button>
+        </div>
+
         {/* Dynamic Voice Synthesis Settings HUD */}
-        <div className="pt-5 border-t border-zinc-800 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="speechSynth"
-                checked={readAloudEnabled}
-                onChange={(e) => {
-                  setReadAloudEnabled(e.target.checked);
-                  if (!e.target.checked) {
-                    setIsPlaying(false);
-                    stopGeminiAudio();
-                    if (speechActive) {
-                      window.speechSynthesis.cancel();
-                      setSpeechActive(false);
+        {showVoiceSettings && (
+          <div className="pt-5 border-t border-zinc-800 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="speechSynth"
+                  checked={readAloudEnabled}
+                  onChange={(e) => {
+                    setReadAloudEnabled(e.target.checked);
+                    if (!e.target.checked) {
+                      setIsPlaying(false);
+                      stopGeminiAudio();
                     }
-                  }
-                }}
-                className="rounded text-[#e2b874] focus:ring-[#e2b874] bg-zinc-900 border-zinc-800 cursor-pointer"
-              />
-              <div>
-                <label htmlFor="speechSynth" className="font-bold text-xs text-zinc-300 cursor-pointer flex items-center gap-1.5">
-                  <Sparkle className="w-3.5 h-3.5 text-[#e2b874] fill-[#e2b874]" />
-                  Ativar Narração de Texto por Voz
-                </label>
-                <p className="text-[10px] text-zinc-500">Gera a leitura em tempo real a partir do conteúdo escrito do livro.</p>
+                  }}
+                  className="rounded text-[#e2b874] focus:ring-[#e2b874] bg-zinc-900 border-zinc-800 cursor-pointer"
+                />
+                <div>
+                  <label htmlFor="speechSynth" className="font-bold text-xs text-zinc-300 cursor-pointer flex items-center gap-1.5">
+                    <Sparkle className="w-3.5 h-3.5 text-[#e2b874] fill-[#e2b874]" />
+                    Ativar Narração de Texto por Voz
+                  </label>
+                  <p className="text-[10px] text-zinc-500">Gera a leitura em tempo real a partir do conteúdo escrito do livro.</p>
+                </div>
               </div>
-            </div>
 
-            {readAloudEnabled && (
-              <div className="flex border border-zinc-800 rounded-xl overflow-hidden p-0.5 bg-zinc-950 max-w-fit">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTtsMode("browser");
-                    stopGeminiAudio();
-                    if (isPlaying) {
-                      setTimeout(speakActivePageText, 100);
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                    ttsMode === "browser" ? "bg-zinc-800 text-[#e2b874]" : "text-zinc-500 hover:text-zinc-300"
-                  }`}
-                >
-                  Sintetizador Local
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTtsMode("gemini");
-                    if ("speechSynthesis" in window) {
-                      window.speechSynthesis.cancel();
-                    }
-                    setSpeechActive(false);
-                    if (isPlaying) {
-                      const activeText = book.pdfContent[chapters[activeChapterIndex]?.startPage || 0] || "";
-                      setTimeout(() => playGeminiTTS(activeText, true), 100);
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                    ttsMode === "gemini" ? "bg-[#e2b874]/15 border border-[#e2b874]/30 text-[#e2b874]" : "text-zinc-500 hover:text-zinc-300"
-                  }`}
-                >
+              {readAloudEnabled && (
+                <div className="flex border border-zinc-800 rounded-xl overflow-hidden p-1 bg-zinc-950 text-[11px] font-bold text-[#e2b874] items-center gap-1.5 px-3">
                   <Sparkles className="w-3 h-3 text-[#e2b874]" />
-                  Narrador IA Gemini 3.1
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Expanded Gemini voice profiles selector */}
-          {readAloudEnabled && ttsMode === "gemini" && (
-            <div className="bg-zinc-950 rounded-2xl p-4 border border-zinc-900 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">Voz do Narrador Premium</span>
-                {isTtsLoading && (
-                  <span className="text-[10px] text-[#e2b874] flex items-center gap-1.5 animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#e2b874] animate-ping" />
-                    Gerando áudio via IA...
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {[
-                  { name: "Kore", label: "Kore", desc: "Equilibrada" },
-                  { name: "Puck", label: "Puck", desc: "Teatral" },
-                  { name: "Charon", label: "Charon", desc: "Profunda" },
-                  { name: "Fenrir", label: "Fenrir", desc: "Enérgica" },
-                  { name: "Zephyr", label: "Zephyr", desc: "Suave" }
-                ].map((voice) => (
-                  <button
-                    key={voice.name}
-                    type="button"
-                    onClick={() => {
-                      setGeminiVoice(voice.name);
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition relative cursor-pointer group ${
-                      geminiVoice === voice.name
-                        ? "bg-[#e2b874]/5 border-[#e2b874] text-[#e2b874]"
-                        : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400"
-                    }`}
-                  >
-                    <span className="text-[11px] font-bold block">{voice.label}</span>
-                    <span className="text-[9px] text-zinc-500 block leading-tight">{voice.desc}</span>
-                    {geminiVoice === voice.name && (
-                      <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#e2b874] shadow-[0_0_8px_#e2b874]" />
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {ttsFeedback && (
-                <div className="text-[10px] text-zinc-500 bg-zinc-900/60 py-1.5 px-3 rounded-lg border border-zinc-900 text-center italic">
-                  {ttsFeedback}
+                  Narrador IA Gemini 3.1 Ativo
                 </div>
               )}
             </div>
-          )}
 
-          <div className="flex flex-col sm:flex-row justify-between items-center pt-2 gap-2 text-[11px] text-zinc-500 border-t border-zinc-900">
-            <span className="flex items-center gap-1">
-              <Zap className="w-3.5 h-3.5 text-zinc-400" />
-              Sintetiza o texto em som realista palavra-por-palavra.
-            </span>
-            <div className="flex items-center gap-1 font-bold text-[#e2b874]">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Tempo total do audiobook: {book.audioDuration || "1h"}</span>
+            {/* Expanded Gemini voice profiles selector */}
+            {readAloudEnabled && (
+              <div className="bg-zinc-950 rounded-2xl p-4 border border-zinc-900 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">Voz do Narrador Premium</span>
+                  {isTtsLoading && (
+                    <span className="text-[10px] text-[#e2b874] flex items-center gap-1.5 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#e2b874] animate-ping" />
+                      Gerando áudio via IA...
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {[
+                    { name: "Kore", label: "Kore", desc: "Equilibrada" },
+                    { name: "Puck", label: "Puck", desc: "Teatral" },
+                    { name: "Charon", label: "Charon", desc: "Profunda" },
+                    { name: "Fenrir", label: "Fenrir", desc: "Enérgica" },
+                    { name: "Zephyr", label: "Zephyr", desc: "Suave" }
+                  ].map((voice) => (
+                    <button
+                      key={voice.name}
+                      type="button"
+                      onClick={() => {
+                        setGeminiVoice(voice.name);
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition relative cursor-pointer group ${
+                        geminiVoice === voice.name
+                          ? "bg-[#e2b874]/5 border-[#e2b874] text-[#e2b874]"
+                          : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400"
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold block">{voice.label}</span>
+                      <span className="text-[9px] text-zinc-500 block leading-tight">{voice.desc}</span>
+                      {geminiVoice === voice.name && (
+                        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#e2b874] shadow-[0_0_8px_#e2b874]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {quotaError && (
+                  <div className="flex items-start gap-3 p-3 bg-red-950/20 border border-red-900/30 rounded-xl text-red-300 text-[11px] mb-3">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400 mt-0.5 animate-pulse" />
+                    <div className="flex-1">
+                      <h4 className="font-bold text-red-200 text-xs">Quota do Narrador IA Gemini Excedida</h4>
+                      <p className="mt-1 text-[10px] leading-relaxed text-red-300/80">
+                        O limite diário de processamento de voz inteligente foi atingido para este livro. Por favor, tente novamente mais tarde ou atualize seu plano. O sintetizador local automático foi removido por completo para manter a excelência da experiência.
+                      </p>
+                      <button 
+                        onClick={() => setQuotaError(false)}
+                        className="mt-1.5 text-[9px] font-bold text-red-400 hover:text-red-200 underline cursor-pointer"
+                      >
+                        Fechar aviso
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {ttsFeedback && (
+                  <div className="text-[10px] text-zinc-500 bg-zinc-900/60 py-1.5 px-3 rounded-lg border border-zinc-900 text-center italic">
+                    {ttsFeedback}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row justify-between items-center pt-2 gap-2 text-[11px] text-zinc-500 border-t border-zinc-900">
+              <span className="flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-zinc-400" />
+                Sintetiza o texto em som realista palavra-por-palavra.
+              </span>
+              <div className="flex items-center gap-1 font-bold text-[#e2b874]">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Tempo total do audiobook: {book.audioDuration || "1h"}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Chapters list explorer shelf */}
@@ -816,50 +718,48 @@ export default function AudiobookPlayer({
         <h3 className="text-base font-serif font-bold text-zinc-100 mb-4 pb-2 border-b border-zinc-800">
           Capítulos do Audiobook ({chapters.length})
         </h3>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {chapters.map((ch, idx) => (
-            <button
+            <div
               key={idx}
-              onClick={() => {
-                const startSeconds = chapters.slice(0, idx).reduce((acc, c) => acc + c.durationSeconds, 0);
-                setCurrentTime(startSeconds);
-                setActiveChapterIndex(idx);
-                
-                audioPauseOffsetRef.current = 0;
-                stopGeminiAudio();
-                audioBufferRef.current = null;
-
-                if (speechActive) {
-                  window.speechSynthesis.cancel();
-                  setSpeechActive(false);
-                }
-                
-                if (isPlaying && readAloudEnabled) {
-                  const activeText = book.pdfContent[ch.startPage || 0] || "";
-                  if (ttsMode === "gemini") {
-                    setTimeout(() => playGeminiTTS(activeText, true), 100);
-                  } else {
-                    setTimeout(speakActivePageText, 100);
-                  }
-                }
-              }}
-              className={`w-full text-left p-3 rounded-xl transition text-xs flex items-center justify-between cursor-pointer ${
+              className={`w-full p-2.5 rounded-xl transition text-xs flex items-center justify-between border ${
                 activeChapterIndex === idx
-                  ? "bg-[#e2b874]/5 border border-[#e2b874]/30 text-[#e2b874] font-bold"
-                  : "hover:bg-zinc-900 text-zinc-400 border border-transparent"
+                  ? "bg-[#e2b874]/5 border-[#e2b874]/30 text-[#e2b874]"
+                  : "hover:bg-zinc-900/40 text-zinc-400 border-transparent bg-zinc-950/20"
               }`}
             >
-              <div className="flex items-center gap-2.5">
-                <span className="font-mono text-[10px] text-zinc-500">#0{idx + 1}</span>
-                <span>{ch.title}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-zinc-500 font-medium">Página Inicial: {ch.startPage + 1}</span>
-                <span className="text-[10px] bg-zinc-900 text-zinc-400 border border-zinc-800 font-bold px-2 py-0.5 rounded-full font-mono">
-                  {formatTime(ch.durationSeconds)}
-                </span>
-              </div>
-            </button>
+              {/* Clickable Area to switch chapter */}
+              <button
+                onClick={() => {
+                  const startSeconds = chapters.slice(0, idx).reduce((acc, c) => acc + c.durationSeconds, 0);
+                  setCurrentTime(startSeconds);
+                  setActiveChapterIndex(idx);
+                  
+                  audioPauseOffsetRef.current = 0;
+                  stopGeminiAudio();
+                  audioBufferRef.current = null;
+                  
+                  if (isPlaying && readAloudEnabled) {
+                    const activeText = book.pdfContent[ch.startPage || 0] || "";
+                    setTimeout(() => playGeminiTTS(activeText, true), 100);
+                  }
+                }}
+                className="flex-1 text-left flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="font-mono text-[10px] text-zinc-500">#0{idx + 1}</span>
+                  <span className={activeChapterIndex === idx ? "font-bold text-[#e2b874]" : "text-zinc-200 hover:text-[#e2b874] transition"}>
+                    {ch.title}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mr-2">
+                  <span className="text-[10px] text-zinc-500 font-medium hidden sm:inline">Pág: {ch.startPage + 1}</span>
+                  <span className="text-[10px] bg-zinc-900 text-zinc-400 border border-zinc-800 font-bold px-2 py-0.5 rounded-full font-mono">
+                    {formatTime(ch.durationSeconds)}
+                  </span>
+                </div>
+              </button>
+            </div>
           ))}
         </div>
       </div>

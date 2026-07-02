@@ -17,16 +17,21 @@ import {
   Headphones,
   FileText
 } from "lucide-react";
-import { Book, ReadingProgress, Bookmark as BookmarkType, HighlightAndNote } from "../types";
+import { Book, ReadingProgress, Bookmark as BookmarkType, HighlightAndNote, User } from "../types";
 import { askGeminiAssistant } from "../lib/api";
+import BookReviews from "./BookReviews";
+import { isUserPremium } from "../lib/subscription";
+import { Lock } from "lucide-react";
 
 interface ReaderProps {
   book: Book;
   userId: string;
+  user: User;
   onBackToLibrary: () => void;
   onOpenAudiobook: () => void;
-  onUpdateProgress: (page: number) => void;
+  onUpdateProgress: (page: number, readingSeconds?: number) => void;
   progress: ReadingProgress | null;
+  onTriggerPaywall: (reason: "highlights") => void;
 }
 
 type ReaderTheme = "claro" | "sepia" | "escuro";
@@ -34,19 +39,33 @@ type ReaderTheme = "claro" | "sepia" | "escuro";
 export default function Reader({
   book,
   userId,
+  user,
   onBackToLibrary,
   onOpenAudiobook,
   onUpdateProgress,
   progress,
+  onTriggerPaywall,
 }: ReaderProps) {
+  const premium = isUserPremium(user);
   const [currentPage, setCurrentPage] = useState(progress?.lastPage || 0);
   const [theme, setTheme] = useState<ReaderTheme>("escuro");
   const [fontSize, setFontSize] = useState(1.1); // in rem
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [notes, setNotes] = useState<HighlightAndNote[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeSidebarTab, setActiveSidebarTab] = useState<"companion" | "notes" | "search" | "reviews">("companion");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ page: number; snippet: string }[]>([]);
+  
+  // Timer to track exact active reading time (in seconds) on the current page
+  const timeSpentRef = useRef<number>(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      timeSpentRef.current += 1;
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
   
   // Highlight draft state
   const [selectedText, setSelectedText] = useState("");
@@ -82,16 +101,26 @@ export default function Reader({
       .catch((err) => console.error("Error fetching notes:", err));
   }, [book.id, userId]);
 
-  // Handle page turn and trigger parent progress update
+  // Handle page turn and trigger parent progress update with exact reading seconds
   const handlePageChange = (newPage: number) => {
     if (newPage >= 0 && newPage < book.pages) {
+      const elapsed = timeSpentRef.current;
+      timeSpentRef.current = 0; // Reset for the next page
       setCurrentPage(newPage);
-      onUpdateProgress(newPage);
+      onUpdateProgress(newPage, elapsed);
       // Clean selected text draft
       setSelectedText("");
       setShowHighlightForm(false);
       setAiResponse("");
     }
+  };
+
+  // Handle exiting back to library and saving the final reading session seconds
+  const handleBackToLibrary = () => {
+    const elapsed = timeSpentRef.current;
+    timeSpentRef.current = 0;
+    onUpdateProgress(currentPage, elapsed);
+    onBackToLibrary();
   };
 
   // Toggle page bookmark
@@ -146,6 +175,10 @@ export default function Reader({
 
   // Handle standard user text selection
   const handleTextSelection = () => {
+    if (!premium && notes.length >= 3) {
+      onTriggerPaywall("highlights");
+      return;
+    }
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
       setSelectedText(selection.toString().trim());
@@ -155,6 +188,10 @@ export default function Reader({
 
   // Click on any paragraph to auto-select and highlight (Frictionless UX)
   const handleParagraphClick = (text: string) => {
+    if (!premium && notes.length >= 3) {
+      onTriggerPaywall("highlights");
+      return;
+    }
     setSelectedText(text);
     setShowHighlightForm(true);
   };
@@ -261,32 +298,83 @@ export default function Reader({
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${activeTheme.outerBg} selection:bg-[#e2b874]/30`}>
       {/* Top Navbar */}
-      <header className={`px-4 py-3 border-b flex items-center justify-between shadow-sm sticky top-0 z-20 transition-colors ${
+      <header className={`px-4 py-2.5 md:py-3 border-b flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 shadow-sm sticky top-0 z-20 transition-colors ${
         theme === "escuro" 
           ? "bg-[#121214] border-zinc-800 text-zinc-100" 
           : theme === "sepia" 
             ? "bg-[#fcf7e8] border-[#ebdcb3] text-[#4a3f28]" 
             : "bg-white border-gray-200 text-gray-900"
       }`}>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBackToLibrary}
-            className={`p-2 rounded-xl transition cursor-pointer ${
-              theme === "escuro" ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100" : "hover:bg-gray-100 text-gray-600"
-            }`}
-            title="Voltar para Biblioteca"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          
-          <div className="min-w-0">
-            <h2 className={`text-sm font-serif font-bold truncate ${theme === "escuro" ? "text-zinc-100" : "text-gray-900"}`}>{book.title}</h2>
-            <p className={`text-[10px] truncate ${theme === "escuro" ? "text-zinc-500" : "text-gray-500"}`}>{book.author}</p>
+        {/* Row 1 on mobile: Title & back button on left, quick controls on the right */}
+        <div className="flex items-center justify-between w-full md:w-auto gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={handleBackToLibrary}
+              className={`p-2 rounded-xl transition cursor-pointer flex-shrink-0 ${
+                theme === "escuro" ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100" : "hover:bg-gray-100 text-gray-600"
+              }`}
+              title="Voltar para Biblioteca"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            
+            <div className="min-w-0">
+              <h2 className={`text-xs md:text-sm font-serif font-bold truncate ${theme === "escuro" ? "text-zinc-100" : "text-gray-900"}`}>{book.title}</h2>
+              <p className={`text-[9px] md:text-[10px] truncate ${theme === "escuro" ? "text-zinc-500" : "text-gray-500"}`}>{book.author}</p>
+            </div>
+          </div>
+
+          {/* Quick Panels on the right (MOBILE ONLY) */}
+          <div className="flex md:hidden items-center gap-1 flex-shrink-0">
+            {book.audiobookAvailable && (
+              <button
+                onClick={onOpenAudiobook}
+                className={`p-1.5 rounded-lg flex items-center gap-1 text-[10px] font-semibold transition cursor-pointer ${
+                  theme === "escuro" 
+                    ? "bg-[#e2b874]/10 hover:bg-[#e2b874]/25 text-[#e2b874]" 
+                    : "bg-[#8a7e58]/10 hover:bg-[#8a7e58]/20 text-[#8a7e58]"
+                }`}
+                title="Ouvir Audiobook"
+              >
+                <Headphones className="w-3.5 h-3.5 animate-pulse" />
+                <span>Audio</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleToggleBookmark}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                isCurrentPageBookmarked
+                  ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                  : theme === "escuro" 
+                    ? "text-zinc-500 hover:bg-zinc-850 hover:text-zinc-300" 
+                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              }`}
+              title={isCurrentPageBookmarked ? "Remover marcador" : "Marcar página"}
+            >
+              <Bookmark className={`w-4 h-4 ${isCurrentPageBookmarked ? "fill-red-500" : ""}`} />
+            </button>
+
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                isSidebarOpen 
+                  ? theme === "escuro" 
+                    ? "bg-zinc-800 text-zinc-100" 
+                    : "bg-gray-100 text-gray-850" 
+                  : theme === "escuro" 
+                    ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
+                    : "text-gray-500 hover:bg-gray-100"
+              }`}
+              title="Marcadores e Notas"
+            >
+              <BookMarked className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Central Controls */}
-        <div className="flex items-center gap-2">
+        {/* Central Controls: Font Sizes & Theme selection (Row 2 on mobile, Center on desktop) */}
+        <div className="flex items-center justify-center md:justify-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto">
           {/* Font Sizes controls */}
           <div className={`flex rounded-xl p-1 items-center border ${
             theme === "escuro" ? "bg-zinc-900 border-zinc-800" : "bg-gray-50 border-gray-200"
@@ -313,31 +401,36 @@ export default function Reader({
           </div>
 
           {/* Reading Themes Toggles */}
-          <div className={`flex rounded-xl p-1 items-center border ${
+          <div className={`flex rounded-xl p-1 items-center border gap-1 ${
             theme === "escuro" ? "bg-zinc-900 border-zinc-800" : "bg-gray-50 border-gray-200"
           }`}>
             {(["claro", "sepia", "escuro"] as ReaderTheme[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTheme(t)}
-                className={`p-1 px-2 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer ${
+                className={`p-1 px-1.5 sm:px-2.5 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer flex items-center gap-1.5 ${
                   theme === t 
                     ? theme === "escuro" 
                       ? "bg-zinc-800 text-zinc-100 shadow-sm border border-zinc-700" 
                       : theme === "sepia" 
                         ? "bg-[#fcf7e8] text-[#4a3f28] shadow-sm border border-[#ebdcb3]" 
                         : "bg-white text-gray-900 shadow-sm border border-gray-200"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    : "text-zinc-500 hover:text-zinc-350 hover:bg-zinc-800/10"
                 }`}
+                title={`Tema ${t}`}
               >
-                {t}
+                {/* Visual colored circle representing the theme */}
+                <span className={`w-3 h-3 rounded-full border border-black/10 flex-shrink-0 ${
+                  t === "claro" ? "bg-white" : t === "sepia" ? "bg-[#f4ebd0]" : "bg-zinc-950"
+                }`} />
+                <span className="hidden sm:inline">{t}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Quick panels toggles */}
-        <div className="flex items-center gap-1.5">
+        {/* Quick panels toggles (DESKTOP ONLY) */}
+        <div className="hidden md:flex items-center gap-1.5">
           {book.audiobookAvailable && (
             <button
               onClick={onOpenAudiobook}
@@ -600,155 +693,263 @@ export default function Reader({
               </div>
 
               {/* Sidebar Tabs selectors */}
-              <div className={`flex border-b text-xs ${
+              <div className={`flex border-b text-[10px] ${
                 theme === "escuro" ? "border-zinc-800" : theme === "sepia" ? "border-[#ebdcb3]" : "border-gray-100"
               }`}>
-                {(["companion", "notes", "search"] as const).map((tab) => (
+                {(["companion", "notes", "search", "reviews"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => {
-                      // Swap view modes
+                      setActiveSidebarTab(tab);
                       setActiveAiTab("summary");
                     }}
-                    className={`flex-1 py-3 text-center font-bold capitalize transition cursor-pointer border-b-2 border-transparent ${
-                      theme === "escuro" 
-                        ? "text-zinc-400 hover:text-[#e2b874] hover:border-[#e2b874]" 
-                        : "text-gray-500 hover:text-[#8a7e58] hover:border-[#8a7e58]"
+                    className={`flex-1 py-3 text-center font-bold capitalize transition cursor-pointer border-b-2 ${
+                      activeSidebarTab === tab
+                        ? theme === "escuro"
+                          ? "text-[#e2b874] border-[#e2b874]"
+                          : "text-[#8a7e58] border-[#8a7e58]"
+                        : "border-transparent " + (theme === "escuro"
+                          ? "text-zinc-400 hover:text-zinc-200"
+                          : "text-gray-500 hover:text-gray-800")
                     }`}
                   >
-                    {tab === "companion" ? "Gemini AI" : tab === "notes" ? "Notas (pág)" : "Pesquisar"}
+                    {tab === "companion" ? "Gemini AI" : tab === "notes" ? "Notas" : tab === "search" ? "Pesquisar" : "Comunidade"}
                   </button>
                 ))}
               </div>
 
               {/* Viewport contents */}
               <div className="flex-grow p-4 overflow-y-auto space-y-4">
-                {/* AI Companion view */}
-                <div className="space-y-4 font-sans">
-                  <div className="bg-gradient-to-br from-[#8a7e58]/5 to-transparent border border-[#dad5bf] p-3.5 rounded-xl">
-                    <h4 className="text-xs font-bold text-[#8a7e58] flex items-center gap-1.5 mb-2">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Ações Rápidas do Assistente
-                    </h4>
-                    
-                    <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                      <button
-                        onClick={() => {
-                          setActiveAiTab("summary");
-                          handleAskAssistant("resumir");
-                        }}
-                        className="bg-white border border-[#ece9dc] hover:bg-[#f6f5ee] font-semibold text-gray-700 py-2 rounded-lg transition"
-                      >
-                        Resumir Página
-                      </button>
-                      <button
-                        onClick={() => {
-                          setActiveAiTab("flashcards");
-                          handleAskAssistant("flashcard");
-                        }}
-                        className="bg-white border border-[#ece9dc] hover:bg-[#f6f5ee] font-semibold text-gray-700 py-2 rounded-lg transition"
-                      >
-                        Gerar Flashcard
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Question and answers widget */}
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleAskAssistant("qa");
-                    }}
-                    className="space-y-2"
-                  >
-                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
-                      Pergunte algo sobre a página ou obra:
-                    </label>
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        placeholder="Ex: Qual o simbolismo desta cena?"
-                        className="bg-gray-50 border border-gray-200 focus:border-[#8a7e58] text-xs px-3 py-2 rounded-lg outline-none flex-grow"
-                        value={userAiQuestion}
-                        onChange={(e) => setUserAiQuestion(e.target.value)}
-                      />
-                      <button
-                        type="submit"
-                        disabled={aiLoading}
-                        className="bg-[#8a7e58] text-white px-3 rounded-lg text-xs font-bold flex items-center justify-center transition active:scale-95 disabled:opacity-40"
-                      >
-                        OK
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* Response Container with full markdown styling */}
-                  <div className="border border-[#ece9dc] rounded-xl p-3 bg-gray-50 min-h-[140px] text-xs relative">
-                    {aiLoading ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 rounded-xl space-y-2">
-                        <span className="w-6 h-6 border-2 border-[#8a7e58]/30 border-t-[#8a7e58] rounded-full animate-spin"></span>
-                        <span className="text-[10px] text-gray-400 font-semibold animate-pulse">Gemini gerando resposta...</span>
+                {activeSidebarTab === "companion" && (
+                  /* AI Companion view */
+                  !premium ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 font-sans">
+                      <div className="w-12 h-12 bg-[#e2b874]/10 border border-[#e2b874]/20 text-[#e2b874] rounded-2xl flex items-center justify-center mb-4">
+                        <Lock className="w-6 h-6" />
                       </div>
-                    ) : aiResponse ? (
-                      <div className="space-y-2 text-gray-700 leading-relaxed font-sans max-h-[220px] overflow-y-auto">
-                        <div className="flex items-center justify-between pb-1.5 border-b border-gray-200">
-                          <span className="text-[9px] font-bold bg-[#8a7e58]/10 text-[#8a7e58] px-1.5 py-0.5 rounded uppercase">
-                            {activeAiTab}
-                          </span>
-                          <span className="text-[9px] text-gray-400 font-mono">Gemini-3.5-Flash</span>
+                      <h4 className="text-sm font-serif font-bold text-zinc-100 mb-1.5 flex items-center gap-1.5 justify-center">
+                        Assistente de IA do Gemini
+                      </h4>
+                      <p className="text-xs text-zinc-400 max-w-sm mb-5 leading-relaxed">
+                        Faça perguntas estruturadas sobre qualquer trecho, peça explicações contextuais, resumos e traduções com o BookVerse Premium.
+                      </p>
+                      <button
+                        onClick={() => onTriggerPaywall("highlights")}
+                        className="w-full bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold text-xs py-2.5 rounded-xl transition active:scale-95 shadow-md cursor-pointer"
+                      >
+                        Assinar BookVerse Premium
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 font-sans">
+                    <div className="bg-[#8a7e58]/5 border border-[#dad5bf]/50 p-3.5 rounded-xl">
+                      <h4 className="text-xs font-bold text-[#8a7e58] flex items-center gap-1.5 mb-2">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Ações Rápidas do Assistente
+                      </h4>
+                      
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                        <button
+                          onClick={() => {
+                            setActiveAiTab("summary");
+                            handleAskAssistant("resumir");
+                          }}
+                          className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-100 font-semibold py-2 rounded-lg transition"
+                        >
+                          Resumir Página
+                        </button>
+                        <button
+                          onClick={() => {
+                            setActiveAiTab("flashcards");
+                            handleAskAssistant("flashcard");
+                          }}
+                          className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-100 font-semibold py-2 rounded-lg transition"
+                        >
+                          Gerar Flashcard
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Question and answers widget */}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleAskAssistant("qa");
+                      }}
+                      className="space-y-2"
+                    >
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                        Pergunte algo sobre a página ou obra:
+                      </label>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          placeholder="Ex: Qual o simbolismo desta cena?"
+                          className="bg-zinc-900 border border-zinc-800 focus:border-[#e2b874] text-xs px-3 py-2 rounded-lg outline-none flex-grow text-zinc-100"
+                          value={userAiQuestion}
+                          onChange={(e) => setUserAiQuestion(e.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          disabled={aiLoading}
+                          className="bg-[#8a7e58] hover:bg-[#a6986c] text-zinc-950 px-3 rounded-lg text-xs font-bold flex items-center justify-center transition active:scale-95 disabled:opacity-40"
+                        >
+                          OK
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Response Container with full markdown styling */}
+                    <div className="border border-zinc-800 rounded-xl p-3 bg-zinc-900/30 min-h-[140px] text-xs relative text-zinc-300">
+                      {aiLoading ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/80 rounded-xl space-y-2">
+                          <span className="w-6 h-6 border-2 border-[#8a7e58]/30 border-t-[#8a7e58] rounded-full animate-spin"></span>
+                          <span className="text-[10px] text-zinc-500 font-semibold animate-pulse">Gemini gerando resposta...</span>
                         </div>
-                        <div className="whitespace-pre-wrap">{aiResponse}</div>
-                      </div>
-                    ) : (
-                      <div className="text-center text-gray-400 py-10 flex flex-col items-center justify-center">
-                        <Sparkles className="w-8 h-8 text-gray-200 mb-1" />
-                        <p className="text-[11px] font-medium leading-relaxed">
-                          Nenhuma resposta ativa.<br />Use os botões acima ou faça uma pergunta sobre a obra!
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Local Notes of the active page view */}
-                <div className="pt-4 border-t border-gray-100">
-                  <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-[#8a7e58]" />
-                    Suas Notas & Destaques nesta Página ({notes.filter((n) => n.page === currentPage).length})
-                  </h4>
-
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                    {notes.filter((n) => n.page === currentPage).length === 0 ? (
-                      <p className="text-[11px] text-gray-400 italic">Nenhum destaque salvo na página {currentPage + 1}.</p>
-                    ) : (
-                      notes
-                        .filter((n) => n.page === currentPage)
-                        .map((note) => (
-                          <div
-                            key={note.id}
-                            className={`p-2.5 rounded-lg border text-xs relative ${
-                              note.color === "green"
-                                ? "bg-green-50 border-green-200"
-                                : note.color === "blue"
-                                ? "bg-blue-50 border-blue-200"
-                                : note.color === "pink"
-                                ? "bg-pink-50 border-pink-200"
-                                : "bg-yellow-50 border-yellow-200"
-                            }`}
-                          >
-                            <button
-                              onClick={() => handleDeleteHighlight(note.id)}
-                              className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                            <p className="font-serif italic text-gray-700 line-clamp-2 pr-4">"{note.selectedText}"</p>
-                            {note.text && <p className="mt-1 font-semibold text-gray-800">Nota: {note.text}</p>}
+                      ) : aiResponse ? (
+                        <div className="space-y-2 leading-relaxed font-sans max-h-[220px] overflow-y-auto">
+                          <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800">
+                            <span className="text-[9px] font-bold bg-[#8a7e58]/10 text-[#8a7e58] px-1.5 py-0.5 rounded uppercase">
+                              {activeAiTab}
+                            </span>
+                            <span className="text-[9px] text-zinc-500 font-mono">Gemini-3.5-Flash</span>
                           </div>
-                        ))
-                    )}
+                          <div className="whitespace-pre-wrap">{aiResponse}</div>
+                        </div>
+                      ) : (
+                        <div className="text-center text-zinc-500 py-10 flex flex-col items-center justify-center">
+                          <Sparkles className="w-8 h-8 text-zinc-700 mb-1" />
+                          <p className="text-[11px] font-medium leading-relaxed">
+                            Nenhuma resposta ativa.<br />Use os botões acima ou faça uma pergunta sobre a obra!
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                  )
+                )}
+
+                {activeSidebarTab === "notes" && (
+                  /* Local Notes of the active page view */
+                  !premium ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 font-sans">
+                      <div className="w-12 h-12 bg-[#e2b874]/10 border border-[#e2b874]/20 text-[#e2b874] rounded-2xl flex items-center justify-center mb-4">
+                        <Lock className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-sm font-serif font-bold text-zinc-100 mb-1.5 flex items-center gap-1.5 justify-center">
+                        Destaques e Anotações
+                      </h4>
+                      <p className="text-xs text-zinc-400 max-w-sm mb-5 leading-relaxed">
+                        Salve notas, grife parágrafos importantes e crie seu próprio resumo conceitual com o BookVerse Premium.
+                      </p>
+                      <button
+                        onClick={() => onTriggerPaywall("highlights")}
+                        className="w-full bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold text-xs py-2.5 rounded-xl transition active:scale-95 shadow-md cursor-pointer"
+                      >
+                        Assinar BookVerse Premium
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-[#8a7e58]" />
+                        Suas Notas nesta Página ({notes.filter((n) => n.page === currentPage).length})
+                      </h4>
+
+                      <div className="space-y-2 max-h-[350px] overflow-y-auto">
+                        {notes.filter((n) => n.page === currentPage).length === 0 ? (
+                          <p className="text-[11px] text-zinc-500 italic py-6 text-center">Nenhum destaque salvo na página {currentPage + 1}.</p>
+                        ) : (
+                          notes
+                            .filter((n) => n.page === currentPage)
+                            .map((note) => (
+                              <div
+                                key={note.id}
+                                className={`p-2.5 rounded-lg border text-xs relative ${
+                                  note.color === "green"
+                                    ? "bg-emerald-950/20 border-emerald-900/40 text-emerald-300"
+                                    : note.color === "blue"
+                                    ? "bg-blue-950/20 border-blue-900/40 text-blue-300"
+                                    : note.color === "pink"
+                                    ? "bg-pink-950/20 border-pink-900/40 text-pink-300"
+                                    : "bg-amber-950/20 border-amber-900/40 text-amber-300"
+                                }`}
+                              >
+                                <button
+                                  onClick={() => handleDeleteHighlight(note.id)}
+                                  className="absolute top-2 right-2 text-zinc-500 hover:text-red-400 transition"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                                <p className="font-serif italic line-clamp-2 pr-4">"{note.selectedText}"</p>
+                                {note.text && <p className="mt-1 font-semibold text-zinc-200">Nota: {note.text}</p>}
+                              </div>
+                            ))
+                        )}
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {activeSidebarTab === "search" && (
+                  /* Search Inside Book view */
+                  <div className="space-y-4">
+                    <form onSubmit={handleSearchInsideBook} className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                        Pesquisar no texto do livro:
+                      </label>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          placeholder="Digite uma palavra ou frase..."
+                          className="bg-zinc-900 border border-zinc-800 focus:border-[#e2b874] text-xs px-3 py-2 rounded-lg outline-none flex-grow text-zinc-100"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          className="bg-[#e2b874] hover:bg-[#d4a863] text-zinc-950 px-3 rounded-lg text-xs font-bold flex items-center justify-center transition active:scale-95"
+                        >
+                          Buscar
+                        </button>
+                      </div>
+                    </form>
+
+                    <div className="space-y-2 max-h-[350px] overflow-y-auto">
+                      <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                        Resultados encontrados: {searchResults.length}
+                      </h4>
+
+                      {searchResults.length === 0 ? (
+                        <p className="text-[11px] text-zinc-500 italic py-6 text-center">Nenhum resultado para exibir.</p>
+                      ) : (
+                        searchResults.map((res, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handlePageChange(res.page)}
+                            className="w-full text-left p-2.5 bg-zinc-900/20 hover:bg-zinc-900 border border-zinc-850 rounded-lg text-xs transition block space-y-1"
+                          >
+                            <span className="text-[9px] bg-zinc-800 border border-zinc-700 text-[#e2b874] px-1.5 py-0.5 rounded font-bold">
+                              Página {res.page + 1}
+                            </span>
+                            <p className="text-zinc-300 font-serif italic text-[11px] line-clamp-2">"{res.snippet}"</p>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeSidebarTab === "reviews" && (
+                  /* Reviews & Comments view */
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3.5 flex items-center gap-1.5">
+                      <MessageSquare className="w-4 h-4 text-[#e2b874]" />
+                      Comunidade & Avaliações
+                    </h4>
+                    <BookReviews bookId={book.id} userId={userId} user={user} />
+                  </div>
+                )}
               </div>
 
               {/* Sidebar Footer bookmarks jump lists */}

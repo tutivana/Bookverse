@@ -1,4 +1,4 @@
-import { User, Book, ReadingProgress, Bookmark, HighlightAndNote, Review, ReadingStats } from "../types";
+import { User, Book, ReadingProgress, Bookmark, HighlightAndNote, Review, ReadingStats, BookNotification } from "../types";
 
 const BASE_URL = ""; // Relative paths since frontend and backend run on same server
 
@@ -12,8 +12,9 @@ export async function fetchBooks(search?: string, category?: string): Promise<Bo
   return res.json();
 }
 
-export async function fetchBookById(id: string): Promise<Book> {
-  const res = await fetch(`${BASE_URL}/api/books/${id}`);
+export async function fetchBookById(id: string, userId?: string): Promise<Book> {
+  const url = userId ? `${BASE_URL}/api/books/${id}?userId=${userId}` : `${BASE_URL}/api/books/${id}`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Erro ao carregar detalhes do livro");
   return res.json();
 }
@@ -34,12 +35,13 @@ export async function saveReadingProgress(
   userId: string,
   bookId: string,
   lastPage: number,
-  audioPositionSeconds?: number
+  audioPositionSeconds?: number,
+  readingSeconds?: number
 ): Promise<ReadingProgress> {
   const res = await fetch(`${BASE_URL}/api/progress`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, bookId, lastPage, audioPositionSeconds }),
+    body: JSON.stringify({ userId, bookId, lastPage, audioPositionSeconds, readingSeconds }),
   });
   if (!res.ok) throw new Error("Erro ao salvar progresso de leitura");
   return res.json();
@@ -108,13 +110,114 @@ export async function fetchReviews(bookId: string): Promise<Review[]> {
   return res.json();
 }
 
-export async function submitReview(userId: string, bookId: string, rating: number, comment: string): Promise<Review> {
+export async function submitReview(userId: string, bookId: string, rating: number | undefined, comment: string): Promise<Review> {
   const res = await fetch(`${BASE_URL}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, bookId, rating, comment }),
   });
-  if (!res.ok) throw new Error("Erro ao enviar avaliação");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao enviar comentário/avaliação");
+  }
+  return res.json();
+}
+
+export async function editReview(id: string, userId: string, rating: number | undefined, comment: string): Promise<Review> {
+  const res = await fetch(`${BASE_URL}/api/reviews/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, rating, comment }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao editar comentário/avaliação");
+  }
+  return res.json();
+}
+
+export async function deleteReview(id: string, userId: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/reviews/${id}?userId=${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao excluir comentário");
+  }
+  return true;
+}
+
+export async function toggleReviewLike(id: string, userId: string): Promise<Review> {
+  const res = await fetch(`${BASE_URL}/api/reviews/${id}/like`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) throw new Error("Erro ao curtir comentário");
+  return res.json();
+}
+
+export async function reportReview(id: string, userId: string, reason: string, description: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/reviews/${id}/report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, reason, description }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao denunciar comentário");
+  }
+  return true;
+}
+
+export async function submitReply(id: string, userId: string, comment: string): Promise<Review> {
+  const res = await fetch(`${BASE_URL}/api/reviews/${id}/replies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, comment }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao responder comentário");
+  }
+  return res.json();
+}
+
+export async function deleteReply(id: string, replyId: string, userId: string): Promise<Review> {
+  const res = await fetch(`${BASE_URL}/api/reviews/${id}/replies/${replyId}?userId=${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao excluir resposta");
+  }
+  return res.json();
+}
+
+// Admin comments management
+export async function adminFetchReportedComments(): Promise<Review[]> {
+  const res = await fetch(`${BASE_URL}/api/admin/comments/reported`);
+  if (!res.ok) throw new Error("Erro ao carregar comentários denunciados");
+  return res.json();
+}
+
+export async function adminUpdateCommentStatus(id: string, status: "active" | "hidden", adminId: string): Promise<Review> {
+  const res = await fetch(`${BASE_URL}/api/admin/comments/${id}/status`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, adminId }),
+  });
+  if (!res.ok) throw new Error("Erro ao moderar comentário");
+  return res.json();
+}
+
+export async function adminToggleUserCommentBan(userId: string, adminId: string): Promise<{ success: boolean; isBannedFromCommenting: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/admin/users/${userId}/ban-comment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId }),
+  });
+  if (!res.ok) throw new Error("Erro ao banir/desbanir usuário de comentar");
   return res.json();
 }
 
@@ -148,12 +251,141 @@ export async function adminUpdateBook(id: string, updates: Partial<Book>): Promi
   return res.json();
 }
 
-export async function adminDeleteBook(id: string): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/api/admin/books/${id}`, {
+export async function adminDeleteBook(id: string, adminId: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/admin/books/${id}?adminId=${encodeURIComponent(adminId)}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error("Erro ao remover livro");
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao remover livro");
+  }
   return true;
+}
+
+export async function adminUpdateBookStatus(id: string, status: string, reason: string, adminId: string): Promise<Book> {
+  const res = await fetch(`${BASE_URL}/api/admin/books/${id}/status`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, reason, adminId })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao atualizar status do livro");
+  }
+  const result = await res.json();
+  return result.book;
+}
+
+export async function adminUpdateBookFeatured(id: string, isFeatured: boolean, adminId: string): Promise<Book> {
+  const res = await fetch(`${BASE_URL}/api/admin/books/${id}/featured`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isFeatured, adminId })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao atualizar destaque do livro");
+  }
+  const result = await res.json();
+  return result.book;
+}
+
+export async function adminExecuteBatchAction(
+  bookIds: string[],
+  action: string,
+  category: string,
+  language: string,
+  adminId: string,
+  reason: string
+): Promise<{ success: boolean; count: number }> {
+  const res = await fetch(`${BASE_URL}/api/admin/books/batch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bookIds, action, category, language, adminId, reason })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao processar ação em lote");
+  }
+  return res.json();
+}
+
+export async function adminFetchUsers(): Promise<User[]> {
+  const res = await fetch(`${BASE_URL}/api/admin/users`);
+  if (!res.ok) throw new Error("Erro ao carregar usuários");
+  return res.json();
+}
+
+export async function adminUpdateUserStatus(id: string, status: string, adminId: string): Promise<User> {
+  const res = await fetch(`${BASE_URL}/api/admin/users/${id}/status`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, adminId })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao atualizar status de usuário");
+  }
+  const result = await res.json();
+  return result.user;
+}
+
+export async function adminUpdateUserRole(id: string, role: string, adminId: string): Promise<User> {
+  const res = await fetch(`${BASE_URL}/api/admin/users/${id}/role`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role, adminId })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao atualizar permissão do usuário");
+  }
+  const result = await res.json();
+  return result.user;
+}
+
+export async function submitBookReport(bookId: string, userId: string, reason: string, description: string): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/books/${bookId}/report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, reason, description })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao enviar denúncia");
+  }
+  return res.json();
+}
+
+export async function adminFetchReports(): Promise<any[]> {
+  const res = await fetch(`${BASE_URL}/api/admin/reports`);
+  if (!res.ok) throw new Error("Erro ao carregar denúncias");
+  return res.json();
+}
+
+export async function adminUpdateReportStatus(id: string, status: string, adminId: string): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/admin/reports/${id}/status`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, adminId })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao gerenciar status da denúncia");
+  }
+  return res.json();
+}
+
+export async function adminFetchLogs(): Promise<any[]> {
+  const res = await fetch(`${BASE_URL}/api/admin/logs`);
+  if (!res.ok) throw new Error("Erro ao carregar histórico de auditoria");
+  return res.json();
+}
+
+export async function adminFetchDashboard(): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/admin/dashboard`);
+  if (!res.ok) throw new Error("Erro ao carregar dados do dashboard expandido");
+  return res.json();
 }
 
 // Gemini API Assistant Proxy
@@ -195,3 +427,208 @@ export async function generateGeminiTTS(text: string, voice?: string): Promise<{
   }
   return res.json();
 }
+
+export async function fetchNotifications(userId: string): Promise<BookNotification[]> {
+  const res = await fetch(`${BASE_URL}/api/notifications/${userId}`);
+  if (!res.ok) throw new Error("Erro ao carregar notificações.");
+  return res.json();
+}
+
+export async function markNotificationsAsRead(userId: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/notifications/mark-read`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) throw new Error("Erro ao marcar notificações como lidas.");
+  const data = await res.json();
+  return data.success;
+}
+
+export async function markSingleNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/notifications/mark-single-read`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notificationId, userId }),
+  });
+  if (!res.ok) throw new Error("Erro ao marcar notificação como lida.");
+  const data = await res.json();
+  return data.success;
+}
+
+export async function deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/notifications/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notificationId, userId }),
+  });
+  if (!res.ok) throw new Error("Erro ao deletar notificação.");
+  const data = await res.json();
+  return data.success;
+}
+
+export async function registerDeviceToken(userId: string, token: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/notifications/register-token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, token }),
+  });
+  if (!res.ok) throw new Error("Erro ao registrar token de push.");
+  const data = await res.json();
+  return data.success;
+}
+
+export async function updateNotificationPreferences(userId: string, data: { notifyInApp?: any; notifyPushPrefs?: any }): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/notifications/preferences`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, ...data }),
+  });
+  if (!res.ok) throw new Error("Erro ao atualizar preferências de notificação.");
+  const responseData = await res.json();
+  return responseData.success;
+}
+
+export async function sendAdminBroadcastNotification(adminId: string, params: { title: string; message: string; category?: string; priority?: string; destinationLink?: string }): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/notifications/admin/broadcast`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId, ...params }),
+  });
+  if (!res.ok) throw new Error("Erro ao disparar transmissão de notificações.");
+  const data = await res.json();
+  return data.success;
+}
+
+export async function fetchAdminNotifications(): Promise<BookNotification[]> {
+  const res = await fetch(`${BASE_URL}/api/notifications/admin/list`);
+  if (!res.ok) throw new Error("Erro ao buscar notificações administrativas.");
+  return res.json();
+}
+
+export async function updateUserProfile(userId: string, data: Partial<User>): Promise<User> {
+  const res = await fetch(`${BASE_URL}/api/auth/update-profile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, ...data }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao atualizar perfil.");
+  }
+  const result = await res.json();
+  return result.user;
+}
+
+export async function fetchUserReviews(userId: string): Promise<any[]> {
+  const res = await fetch(`${BASE_URL}/api/user/reviews/${userId}`);
+  if (!res.ok) throw new Error("Erro ao carregar avaliações do usuário.");
+  return res.json();
+}
+
+export async function fetchUserNotes(userId: string): Promise<any[]> {
+  const res = await fetch(`${BASE_URL}/api/user/notes/${userId}`);
+  if (!res.ok) throw new Error("Erro ao carregar notas do usuário.");
+  return res.json();
+}
+
+export async function deleteUserAccount(userId: string, email: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/user/delete-account`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, email }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao excluir conta.");
+  }
+  const result = await res.json();
+  return result.success;
+}
+
+// Admin AI endpoints
+export async function adminFetchAiConfig(): Promise<{ aiEnabled: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/config`);
+  if (!res.ok) throw new Error("Erro ao carregar configurações de IA.");
+  return res.json();
+}
+
+export async function adminUpdateAiConfig(adminId: string, aiEnabled: boolean): Promise<{ success: boolean; aiEnabled: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId, aiEnabled }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao atualizar configuração de IA.");
+  }
+  return res.json();
+}
+
+export async function adminAnalyzeBook(id: string, adminId: string, force?: boolean): Promise<{ success: boolean; analysis: any; cached: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/analyze-book/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId, force }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao executar análise de livro.");
+  }
+  return res.json();
+}
+
+export async function adminAnalyzeCatalog(adminId: string): Promise<{ success: boolean; count: number }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/analyze-catalog`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao executar análise de catálogo.");
+  }
+  return res.json();
+}
+
+export async function adminApplyAiSuggestions(adminId: string, bookId: string, fields: string[]): Promise<{ success: boolean; book: Book }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/apply-suggestions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId, bookId, fields }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao aplicar sugestões da IA.");
+  }
+  return res.json();
+}
+
+export async function adminDetectDuplicates(adminId: string): Promise<{ duplicates: any[] }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/detect-duplicates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao detectar duplicados.");
+  }
+  return res.json();
+}
+
+export async function adminAiAssistantChat(adminId: string, message: string): Promise<{ result: string }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/assistant/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminId, message }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro no chat do assistente de IA.");
+  }
+  return res.json();
+}
+
+

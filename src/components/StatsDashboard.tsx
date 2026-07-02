@@ -14,7 +14,9 @@ import {
   TrendingUp,
   Award
 } from "lucide-react";
-import { ReadingStats, ReadingProgress, Book } from "../types";
+import { ReadingStats, ReadingProgress, Book, User } from "../types";
+import { isUserPremium } from "../lib/subscription";
+import { Lock, Sparkles } from "lucide-react";
 
 interface StatsDashboardProps {
   stats: ReadingStats | null;
@@ -22,6 +24,8 @@ interface StatsDashboardProps {
   books: Book[];
   onBackToLibrary: () => void;
   onSelectBook: (book: Book, startInAudioMode: boolean) => void;
+  user: User | null;
+  onTriggerPaywall: (reason: "stats") => void;
 }
 
 export default function StatsDashboard({
@@ -30,7 +34,10 @@ export default function StatsDashboard({
   books,
   onBackToLibrary,
   onSelectBook,
+  user,
+  onTriggerPaywall,
 }: StatsDashboardProps) {
+  const isPremium = isUserPremium(user);
   // Reading milestones calculations
   const totalMinutes = (stats?.readingMinutes || 0) + (stats?.listeningMinutes || 0);
   const readingRatio = totalMinutes > 0 ? Math.round(((stats?.readingMinutes || 0) / totalDuration()) * 100) : 50;
@@ -119,7 +126,28 @@ export default function StatsDashboard({
       {/* Charts and activity blocks layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Weekly Reading Chart block */}
-        <div className="lg:col-span-2 bg-[#121214] border border-zinc-800 rounded-3xl p-6 shadow-2xl shadow-black/30">
+        <div className="lg:col-span-2 bg-[#121214] border border-zinc-800 rounded-3xl p-6 shadow-2xl shadow-black/30 relative overflow-hidden">
+          {/* Paywall Overlay */}
+          {!isPremium && (
+            <div className="absolute inset-0 bg-zinc-950/75 backdrop-blur-md z-10 flex flex-col items-center justify-center text-center p-6">
+              <div className="w-12 h-12 bg-[#e2b874]/10 border border-[#e2b874]/20 text-[#e2b874] rounded-2xl flex items-center justify-center mb-4">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-serif font-bold text-zinc-100 mb-1.5 flex items-center gap-1.5 justify-center">
+                <Sparkles className="w-4 h-4 text-[#e2b874]" /> Consistência de Leitura Semanal
+              </h3>
+              <p className="text-xs text-zinc-400 max-w-sm mb-5 leading-relaxed">
+                Desbloqueie o acompanhamento detalhado dia a dia, estatísticas de consistência e metas personalizadas com o BookVerse Premium.
+              </p>
+              <button
+                onClick={() => onTriggerPaywall("stats")}
+                className="bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold text-xs px-5 py-2.5 rounded-xl transition active:scale-95 shadow-lg shadow-[#e2b874]/10 cursor-pointer"
+              >
+                Fazer Upgrade para Premium
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-[#e2b874]" />
