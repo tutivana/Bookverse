@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldAlert,
@@ -46,6 +47,7 @@ import {
   CheckCircle
 } from "lucide-react";
 import AdminNotificationCenter from "./AdminNotificationCenter";
+import ProfessionalBookEditor from "./ProfessionalBookEditor";
 import {
   LineChart,
   Line,
@@ -107,7 +109,103 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
   const isAdminOrSuper = currentAdmin.role === "Super Administrador" || currentAdmin.role === "Administrador";
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'books' | 'users' | 'reports' | 'logs' | 'dashboard' | 'notifications' | 'ai'>('books');
+  const [activeTab, setActiveTab] = useState<'books' | 'users' | 'reports' | 'logs' | 'dashboard' | 'notifications' | 'ai' | 'saas' | 'rules'>('books');
+
+  // Rules & Conversion Tab States
+  const [selectedRulesDoc, setSelectedRulesDoc] = useState<'firestore' | 'markdown' | 'conversion'>('firestore');
+  const [rulesDocs, setRulesDocs] = useState({
+    firestore: `# 💾 Regras de Armazenamento no Firestore (BookVerse Core)
+
+O ecossistema BookVerse é sincronizado em tempo real com o **Cloud Firestore** utilizando coleções de alta performance e suporte a operações offline automáticas.
+
+## 📂 Mapeamento de Coleções e Subcoleções
+
+### 1. Coleção Principal: \`books\`
+Registra o catálogo de livros disponíveis.
+* **Caminho**: \`/books/{bookId}\`
+* **Esquema de Atributos**:
+  * \`id\` *(string)*: Chave primária única da obra (slug).
+  * \`title\` *(string)*: Título oficial.
+  * \`author\` *(string)*: Autor ou tradutor principal.
+  * \`description\` *(string)*: Resumo curto/sinopse.
+  * \`category\` *(string)*: Categoria (ex: "Ficção", "Clássico").
+  * \`tags\` *(array<string>)*: Tags para recomendação e busca.
+  * \`coverUrl\` *(string)*: URL de imagem pública de capa.
+  * \`accessType\` *(string)*: \`"free"\` ou \`"premium"\`.
+  * \`language\` *(string)*: Idioma (ex: \`"PT-BR"\`).
+  * \`pagesCount\` *(number)*: Total de páginas geradas no processamento.
+  * \`favoritesCount\` *(number)*: Contador geral de favoritados.
+
+### 2. Coleção de Usuários e Subcoleções
+Cada leitor possui um nó isolado que garante a segurança dos dados pessoais.
+* **Caminho**: \`/users/{userId}\`
+* **Subcoleção \`library\`**: \`/users/{userId}/library/{bookId}\`
+  * Armazena os livros salvos na biblioteca (favoritos).
+  * Atributos: \`bookId\`, \`addedAt\`.
+* **Subcoleção \`progress\`**: \`/users/{userId}/progress/{bookId}\`
+  * Rastreia a página atual do leitor.
+  * Atributos: \`bookId\`, \`currentPage\`, \`updatedAt\`, \`timeSpent\`.
+* **Subcoleção \`bookmarks\`**: \`/users/{userId}/bookmarks/{bookmarkId}\`
+  * Marcadores manuais salvos nas páginas do livro.`,
+    markdown: `# 📝 Protocolo de Formatação em Markdown para Livros
+
+O BookVerse renderiza todo o conteúdo textual das obras usando Markdown estrito. Isso nos permite criar uma experiência de leitura limpa, modular e altamente responsiva para qualquer tamanho de tela.
+
+## 📐 Diretrizes de Marcação Suportadas
+
+### 1. Títulos de Capítulos (\`#\`)
+O uso de \`#\` (Header 1) deve ser reservado exclusivamente para títulos de capítulos ou seções principais.
+* O renderizador detecta automaticamente o título para preencher o sumário dinâmico.
+* **Regra de Conversão**: Todo título de capítulo inicia automaticamente uma nova página.
+
+### 2. Quebras Manuais de Página (\`---\`)
+Insira três hífens em uma linha isolada para forçar o leitor a quebrar a página imediatamente.
+* Útil para poemas, epílogos, prefácios ou citações soltas.
+\`\`\`markdown
+Isso está na página A.
+---
+Isso está na página B.
+\`\`\`
+
+### 3. Ênfases Visuais
+* **Negrito**: \`**palavra**\` para termos de grande destaque.
+* *Itálico*: \`*palavra*\` para diálogos, pensamentos de personagens ou palavras estrangeiras.
+* > Citações em Bloco: Use \`>\` para citações de outros livros ou pensamentos profundos.`,
+    conversion: `# ⚙️ Regras de Conversão e Paginação (TXT/EPUB para BookVerse)
+
+Para garantir um tempo de resposta inferior a 200ms no carregamento e renderização fluida no navegador, o texto bruto dos livros deve passar por um algoritmo de normalização e paginação dinâmica.
+
+## 📝 Regras de Processamento do Algoritmo
+
+### 1. Paginação por Caracteres (Fallback)
+Caso o livro não possua divisores manuais (\`---\`), o algoritmo realiza a divisão em páginas usando um limite de caracteres parametrizável (Padrão: 1.200 caracteres por página).
+
+### 2. Algoritmo de Busca de Margens Seguras
+Para evitar que a quebra de página ocorra no meio de uma frase ou palavra, o conversor segue as seguintes regras de busca:
+1. Identifica a posição limite (ex: 1.200).
+2. Procura para trás (até no máximo 150 caracteres) pelo sinal de pontuação mais próximo (\`.\`, \`!\`, \`?\` ou quebra de linha \`\\n\`).
+3. Realiza a quebra de página nessa pontuação segura para manter a coesão de leitura.
+
+### 3. Divisão Automatizada por Capítulos
+Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo força o fechamento da página atual e inicia uma nova página, mesmo que a página anterior contenha apenas alguns caracteres.`
+  });
+  const [isEditingRules, setIsEditingRules] = useState(false);
+  const [rulesEditContent, setRulesEditContent] = useState("");
+
+  // Interactive Book Converter States
+  const [rawBookTitle, setRawBookTitle] = useState("O Pequeno Príncipe (Capítulo Extra)");
+  const [rawBookContent, setRawBookContent] = useState(
+    "# Capítulo I - Um Encontro Inesperado\\n\\nFoi assim que vivi sozinho, sem ninguém com quem conversar de verdade, até uma pane no deserto do Saara, há seis anos. Algo se quebrara no motor. E como não trazia comigo mecânico nem passageiros, preparei-me para executar sozinho o difícil conserto. Era, para mim, questão de vida ou de morte. A água de beber daria apenas para oito dias.\\n\\nA primeira noite adormeci, pois, sobre a areia, a mil milhas de qualquer terra habitada. Estava mais isolado que um náufrago numa jangada no meio do oceano. Imaginem, pois, a minha surpresa, quando o dia surgiu, ao ser acordado por uma vozinha estranha que dizia:\\n\\n-- Por favor... desenha-me um carneiro!\\n\\n-- Hein?\\n\\n-- Desenha-me um carneiro...\\n\\n---\\n\\n# Capítulo II - Os Mistérios da Areia\\n\\nEu me pus de pé, como se tivesse sido atingido por um raio. Esfreguei bem os olhos. Olhei com atenção. E vi um pedacinho de gente inteiramente extraordinário, que me considerava com gravidade.\\n\\nEis aqui o melhor retrato que, mais tarde, consegui fazer dele. Mas o meu desenho é seguramente muito menos sedutor que o modelo. Não tenho culpa. Fora desencorajado, na minha carreira de pintor, pelos adultos, aos seis anos de idade, e só aprendera a desenhar jiboias abertas e fechadas."
+  );
+  const [pageSizeLimit, setPageSizeLimit] = useState(600);
+  const [autoSplitChapters, setAutoSplitChapters] = useState(true);
+  
+  // Generated Pages State
+  const [generatedPages, setGeneratedPages] = useState<string[]>([]);
+  const [selectedPreviewPage, setSelectedPreviewPage] = useState(0);
+  const [previewTheme, setPreviewTheme] = useState<'light' | 'dark' | 'sepia'>('sepia');
+  const [previewFontSize, setPreviewFontSize] = useState<number>(14);
+  const [previewFontFamily, setPreviewFontFamily] = useState<'serif' | 'sans'>('serif');
 
   // Admin AI Dashboard States
   const [aiConfigEnabled, setAiConfigEnabled] = useState(true);
@@ -209,6 +307,109 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
   const [tabLoading, setTabLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  const handleProcessPagination = () => {
+    if (!rawBookContent) {
+      setGeneratedPages([]);
+      return;
+    }
+
+    let pages: string[] = [];
+    
+    // Unescape literal newlines in default string if any
+    const formattedContent = rawBookContent.replace(/\\n/g, "\n");
+    
+    // Split by manual page breaks "---" first
+    const parts = formattedContent.split(/\n---\n|\n---\r\n|^---\n|^---\r\n/);
+    
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      
+      // If we need to split by chapters or character limits
+      if (autoSplitChapters) {
+        // Chapters start with "\n#" or at start
+        const lines = part.split("\n");
+        let currentPageText = "";
+        
+        for (const line of lines) {
+          if (line.trim().startsWith("#")) {
+            // New chapter starts! Push current page if not empty
+            if (currentPageText.trim()) {
+              pages.push(currentPageText.trim());
+              currentPageText = "";
+            }
+            currentPageText += line + "\n";
+          } else {
+            currentPageText += line + "\n";
+            // If character limit exceeded, we can do character limit paging
+            if (currentPageText.length >= pageSizeLimit) {
+              // Try to find a good punctuation point to break (., !, ?, \n)
+              let breakIndex = -1;
+              const searchOffset = Math.min(currentPageText.length, 120);
+              
+              // Search for punctuation backwards from the end
+              for (let i = currentPageText.length - 1; i >= currentPageText.length - searchOffset; i--) {
+                if ([".", "!", "?", "\n"].includes(currentPageText[i])) {
+                  breakIndex = i;
+                  break;
+                }
+              }
+              
+              if (breakIndex !== -1) {
+                const pageText = currentPageText.substring(0, breakIndex + 1);
+                pages.push(pageText.trim());
+                currentPageText = currentPageText.substring(breakIndex + 1);
+              } else {
+                // Hard break
+                pages.push(currentPageText.trim());
+                currentPageText = "";
+              }
+            }
+          }
+        }
+        if (currentPageText.trim()) {
+          pages.push(currentPageText.trim());
+        }
+      } else {
+        // Simple character split
+        let text = part;
+        while (text.length > 0) {
+          if (text.length <= pageSizeLimit) {
+            pages.push(text.trim());
+            break;
+          }
+          
+          let breakIndex = -1;
+          const searchRange = Math.min(text.length, pageSizeLimit);
+          const searchOffset = 120;
+          
+          // Look backward from limit for punctuation
+          for (let i = searchRange - 1; i >= searchRange - searchOffset && i >= 0; i--) {
+            if ([".", "!", "?", "\n"].includes(text[i])) {
+              breakIndex = i;
+              break;
+            }
+          }
+          
+          if (breakIndex !== -1) {
+            pages.push(text.substring(0, breakIndex + 1).trim());
+            text = text.substring(breakIndex + 1);
+          } else {
+            pages.push(text.substring(0, pageSizeLimit).trim());
+            text = text.substring(pageSizeLimit);
+          }
+        }
+      }
+    }
+    
+    setGeneratedPages(pages);
+    setSelectedPreviewPage(0);
+  };
+
+  // Run pagination once on mount/load or when content changes
+  useEffect(() => {
+    handleProcessPagination();
+  }, [rawBookContent, pageSizeLimit, autoSplitChapters]);
 
   // Load backend data based on active tab
   useEffect(() => {
@@ -747,7 +948,7 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
   const handleUpdateReport = async (reportId: string, nextStatus: string) => {
     try {
       await adminUpdateReportStatus(reportId, nextStatus, currentAdmin.id);
-      setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: nextStatus } : r));
+      setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: nextStatus as any } : r));
       triggerSuccess(`Denúncia marcada como "${nextStatus}".`);
     } catch (err: any) {
       alert(err.message || "Erro ao atualizar denúncia");
@@ -1056,6 +1257,18 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
         >
           <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
           IA Administrativa <span className="text-[9px] bg-amber-100 text-amber-700 px-1 py-0.2 rounded font-mono">CORE</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('rules')}
+          className={`flex items-center gap-2 px-5 py-3 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'rules'
+              ? "border-[#8a7e58] text-[#8a7e58]"
+              : "border-transparent text-gray-500 hover:text-gray-800"
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          Regras & Conversão
         </button>
       </div>
 
@@ -2794,298 +3007,42 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
           MODALS & DIALOGS
           ========================================== */}
       
-      {/* DIALOG 1: ADD / EDIT BOOK FORM */}
+      {/* DIALOG 1: PROFESSIONAL BOOK WIZARD & EDITOR */}
       <AnimatePresence>
         {(isAdding || isEditing) && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl border border-[#ece9dc] w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-              id="form-add-edit-book"
-            >
-              {/* Form header */}
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#f6f5ee]/40">
-                <div>
-                  <h2 className="text-xl font-serif font-bold text-gray-900">
-                    {isEditing ? `Editar Livro: ${title}` : "Publicar Novo Livro no Acervo"}
-                  </h2>
-                  <p className="text-xs text-gray-400 mt-1">Preencha os metadados bibliográficos e envie os arquivos de conteúdo.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setIsAdding(false);
-                    setIsEditing(null);
-                    resetForm();
-                  }}
-                  className="p-1.5 hover:bg-gray-200 rounded-lg transition text-gray-400 hover:text-gray-700 cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Direct Parse selector */}
-              {!isEditing && (
-                <div className="mx-6 mt-6 p-4 bg-amber-50/50 border border-amber-200 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-100 flex-shrink-0">
-                      <FileUp className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-gray-800 block">Importação Direta de Livros (PDF/EPUB)</span>
-                      <span className="text-[10px] text-gray-400 block mt-0.5">Selecione um arquivo PDF ou EPUB para preencher o formulário e extrair as páginas automaticamente!</span>
-                    </div>
-                  </div>
-
-                  <div className="relative overflow-hidden w-full md:w-auto">
-                    <button className="bg-[#8a7e58] hover:bg-[#4a432d] text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer w-full justify-center">
-                      <Upload className="w-3.5 h-3.5" />
-                      Escolher PDF ou EPUB
-                    </button>
-                    <input
-                      type="file"
-                      accept=".pdf,.epub"
-                      onChange={handleDirectBookImport}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Progress of Parsing */}
-              {isParsingBookFile && (
-                <div className="mx-6 mt-4 p-4 bg-[#f6f5ee] border border-[#ece9dc] rounded-2xl flex items-center gap-3">
-                  <RefreshCw className="w-4 h-4 text-[#8a7e58] animate-spin flex-shrink-0" />
-                  <span className="text-xs font-bold text-gray-600 animate-pulse">{parsingStatus}</span>
-                </div>
-              )}
-
-              {/* Central Form content */}
-              <form onSubmit={handleFormSubmit} className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-gray-600">Título da Obra *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ex: Dom Casmurro"
-                      className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-gray-600">Autor *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ex: Machado de Assis"
-                      className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                      value={author}
-                      onChange={(e) => setAuthor(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-gray-600">Categoria literária *</label>
-                    <select
-                      className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                    >
-                      <option value="Clássico">Clássico</option>
-                      <option value="Ficção Científica">Ficção Científica</option>
-                      <option value="Fantasia">Fantasia</option>
-                      <option value="Romance">Romance</option>
-                      <option value="História">História</option>
-                      <option value="Filosofia">Filosofia</option>
-                      <option value="Poesia">Poesia</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-gray-600">Idioma *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ex: Português"
-                      className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-gray-600">Ano de Publicação</label>
-                    <input
-                      type="text"
-                      placeholder="ex: 1899"
-                      className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                      value={publishDate}
-                      onChange={(e) => setPublishDate(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-gray-600">Código ISBN</label>
-                    <input
-                      type="text"
-                      placeholder="ex: 978-65-8600-00-0"
-                      className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                      value={isbn}
-                      onChange={(e) => setIsbn(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block font-semibold text-gray-600">Tags / Palavras-chave (Separadas por vírgula)</label>
-                  <input
-                    type="text"
-                    placeholder="ex: machado de assis, realismo brasileiro, bruxo do cosme velho"
-                    className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                    value={keywords}
-                    onChange={(e) => setKeywords(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block font-semibold text-gray-600">Descrição/Sinopse *</label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="Escreva um resumo cativante sobre o enredo da obra..."
-                    className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </div>
-
-                {/* Cover uploading combined row */}
-                <div className="space-y-2">
-                  <label className="block font-semibold text-gray-600">Capa do Livro *</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                    <div className="sm:col-span-5">
-                      <div className="border border-dashed border-[#dad5bf] hover:border-[#8a7e58] rounded-xl p-3 text-center bg-gray-50/50 hover:bg-white transition relative flex flex-col items-center justify-center min-h-[92px]">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleCoverUpload}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <Upload className="w-5 h-5 text-gray-400 mb-1" />
-                        <span className="text-[10px] font-bold text-[#8a7e58] block">Upload de Imagem</span>
-                      </div>
-                    </div>
-
-                    <div className="hidden sm:flex sm:col-span-1 items-center justify-center text-gray-400 text-[10px] font-bold">OU</div>
-
-                    <div className="sm:col-span-6 space-y-2">
-                      <input
-                        type="url"
-                        placeholder="https://images.unsplash.com/photo-..."
-                        className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                        value={coverUrl}
-                        onChange={(e) => setCoverUrl(e.target.value)}
-                      />
-                      {coverUrl && (
-                        <div className="flex items-center gap-2 bg-[#f6f5ee]/50 p-1.5 border border-[#ece9dc] rounded-xl">
-                          <img
-                            src={coverUrl}
-                            alt="Capa"
-                            className="w-8 h-11 object-cover rounded shadow-xs border border-gray-100 flex-shrink-0"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop";
-                            }}
-                          />
-                          <div className="min-w-0">
-                            <span className="text-[10px] font-semibold text-gray-500 truncate block">Preview da Capa</span>
-                            <button type="button" onClick={() => setCoverUrl("")} className="text-[9px] text-red-500 font-bold">Remover</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Audiobook support toggles */}
-                <div className="p-4 bg-gray-50 border border-[#ece9dc] rounded-2xl space-y-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="audioCheck"
-                      checked={audiobookAvailable}
-                      onChange={(e) => setAudiobookAvailable(e.target.checked)}
-                      className="rounded text-[#8a7e58] focus:ring-[#8a7e58] cursor-pointer"
-                    />
-                    <label htmlFor="audioCheck" className="font-semibold text-gray-700 cursor-pointer text-xs">
-                      Este livro possui suporte a Audiobook narrado de forma inteligente?
-                    </label>
-                  </div>
-
-                  {audiobookAvailable && (
-                    <div className="space-y-1 max-w-sm">
-                      <label className="block font-semibold text-gray-500 text-xs">Duração estimada do Audiobook (ex: 2h 15m)</label>
-                      <input
-                        type="text"
-                        className="w-full bg-white border border-[#ece9dc] rounded-xl py-2 px-3 outline-none focus:ring-1 focus:ring-[#8a7e58] text-gray-900 text-xs"
-                        value={audioDuration}
-                        onChange={(e) => setAudioDuration(e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Content pages text input */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <label className="block font-semibold text-gray-600">Conteúdo do Livro (Páginas) *</label>
-                    <span className="text-[10px] text-gray-400 font-bold">Separe páginas com um parágrafo em branco (duas quebras de linha)</span>
-                  </div>
-                  <textarea
-                    rows={8}
-                    required
-                    placeholder="Escreva o conteúdo da Página 1 do livro aqui.&#10;&#10;Escreva o conteúdo da Página 2 do livro aqui..."
-                    className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl py-2.5 px-3 outline-none focus:bg-white focus:ring-1 focus:ring-[#8a7e58] font-serif text-xs leading-relaxed text-gray-900"
-                    value={pagesRawContent}
-                    onChange={(e) => setPagesRawContent(e.target.value)}
-                  />
-                </div>
-
-                {/* Submission footer */}
-                <div className="pt-4 border-t border-gray-100 flex justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAdding(false);
-                      setIsEditing(null);
-                      resetForm();
-                    }}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-5 py-3 rounded-xl font-bold transition cursor-pointer text-xs"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="bg-[#8a7e58] hover:bg-[#4a432d] text-white px-6 py-3 rounded-xl font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50 text-xs"
-                  >
-                    {loading ? (
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    ) : (
-                      <>
-                        <Check className="w-4.5 h-4.5" />
-                        {isEditing ? "Salvar Alterações" : "Confirmar e Publicar"}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
+          <ProfessionalBookEditor
+            book={isEditing ? (books.find((b) => b.id === isEditing) || null) : null}
+            onClose={() => {
+              setIsAdding(false);
+              setIsEditing(null);
+            }}
+            loading={loading}
+            currentAdmin={{
+              name: currentAdmin.name || "Administrador Geral",
+              role: currentAdmin.role || "Super Administrador",
+              email: currentAdmin.email || "admin@bookverse.com"
+            }}
+            onSave={async (updatedBookData) => {
+              setLoading(true);
+              try {
+                if (isEditing) {
+                  await adminUpdateBook(isEditing, updatedBookData);
+                  triggerSuccess(`Livro "${updatedBookData.title}" atualizado com sucesso!`);
+                } else {
+                  await adminCreateBook(updatedBookData);
+                  triggerSuccess(`Livro "${updatedBookData.title}" adicionado com sucesso como Rascunho!`);
+                }
+                setIsAdding(false);
+                setIsEditing(null);
+                resetForm();
+                onRefreshBooks();
+              } catch (err: any) {
+                setError(err.message || "Erro ao salvar as modificações do livro.");
+              } finally {
+                setLoading(false);
+              }
+            }}
+          />
         )}
       </AnimatePresence>
 
@@ -3597,7 +3554,9 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
                         <div className="md:col-span-9 space-y-2">
                           <div className="bg-amber-50 border border-amber-200/60 p-3 rounded-xl text-xs text-amber-900 font-sans leading-relaxed">
                             <strong className="text-[10px] text-amber-800 block uppercase tracking-wider mb-1 font-serif">Otimização Gerada:</strong>
-                            {aiAnalysisResult.suggestedMetadata || "Um clássico literário inesquecível, enriquecido por descrições profundas e complexidade psicológica que capta a essência da condição humana."}
+                            {typeof aiAnalysisResult.suggestedMetadata === "object"
+                              ? (aiAnalysisResult.suggestedMetadata?.description || aiAnalysisResult.suggestedMetadata?.shortSummary)
+                              : (aiAnalysisResult.suggestedMetadata || "Um clássico literário inesquecível, enriquecido por descrições profundas e complexidade psicológica que capta a essência da condição humana.")}
                           </div>
                         </div>
                       </div>
@@ -3644,6 +3603,429 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
                 )}
               </div>
             </motion.div>
+          </div>
+        )}
+
+        {/* TAB 8: REGRAS & CONVERSÃO */}
+        {activeTab === 'rules' && (
+          <div className="space-y-10 text-left animate-fadeIn" id="tab-rules-and-conversion">
+            {/* Top Banner */}
+            <div className="bg-gradient-to-br from-zinc-50 to-zinc-100 border border-zinc-200 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Database className="w-5 h-5 text-zinc-600" />
+                  <span className="text-[10px] text-zinc-800 bg-zinc-200 px-2 py-0.5 rounded-full font-mono font-bold uppercase tracking-wider">Diretivas de Engenharia</span>
+                </div>
+                <h2 className="text-2xl font-serif font-bold text-gray-900">Regras de Armazenamento & Conversão</h2>
+                <p className="text-xs text-gray-500 max-w-2xl">
+                  Configure as regras de armazenamento do Firestore, padrões de formatação em Markdown e simule a quebra de página automática do motor de leitura do BookVerse.
+                </p>
+              </div>
+            </div>
+
+            {/* Grid 1: Documentation and Rules Editor */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Left col: selector and markdown edit */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="bg-white border border-[#ece9dc] rounded-3xl p-6 space-y-4 shadow-sm">
+                  <h3 className="text-sm font-serif font-bold text-[#2d291c] border-b border-[#ece9dc] pb-3">Documentação de Diretivas</h3>
+                  
+                  {/* Navigation Buttons */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedRulesDoc('firestore');
+                        setIsEditingRules(false);
+                      }}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition cursor-pointer text-center ${
+                        selectedRulesDoc === 'firestore'
+                          ? "bg-zinc-900 text-white"
+                          : "bg-gray-50 hover:bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      Firestore DB
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedRulesDoc('markdown');
+                        setIsEditingRules(false);
+                      }}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition cursor-pointer text-center ${
+                        selectedRulesDoc === 'markdown'
+                          ? "bg-zinc-900 text-white"
+                          : "bg-gray-50 hover:bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      Markdown
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedRulesDoc('conversion');
+                        setIsEditingRules(false);
+                      }}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition cursor-pointer text-center ${
+                        selectedRulesDoc === 'conversion'
+                          ? "bg-zinc-900 text-white"
+                          : "bg-gray-50 hover:bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      Conversão
+                    </button>
+                  </div>
+
+                  {/* Editor / Viewer Container */}
+                  <div className="space-y-4">
+                    {isEditingRules ? (
+                      <div className="space-y-3">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Editor de Diretiva</label>
+                        <textarea
+                          value={rulesEditContent}
+                          onChange={(e) => setRulesEditContent(e.target.value)}
+                          className="w-full h-80 p-4 border border-zinc-300 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-zinc-500 bg-white text-zinc-950 placeholder-zinc-400"
+                          placeholder="Escreva as diretivas em Markdown..."
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setRulesDocs(prev => ({ ...prev, [selectedRulesDoc]: rulesEditContent }));
+                              setIsEditingRules(false);
+                              setSuccessMsg("Diretiva atualizada com sucesso no ambiente administrativo.");
+                              setTimeout(() => setSuccessMsg(""), 4000);
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Salvar Alterações
+                          </button>
+                          <button
+                            onClick={() => setIsEditingRules(false)}
+                            className="border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Visualizando Guia</span>
+                          <button
+                            onClick={() => {
+                              setRulesEditContent(rulesDocs[selectedRulesDoc]);
+                              setIsEditingRules(true);
+                            }}
+                            className="text-xs text-zinc-600 hover:text-zinc-900 font-bold flex items-center gap-1 bg-zinc-50 hover:bg-zinc-100 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Escrever / Alterar
+                          </button>
+                        </div>
+                        
+                        <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100 max-h-80 overflow-y-auto text-xs prose prose-sm prose-zinc text-zinc-700 font-serif">
+                          <ReactMarkdown>{rulesDocs[selectedRulesDoc]}</ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right col: Explanation of conversion rules */}
+              <div className="lg:col-span-7">
+                <div className="bg-[#FAF9F5] border border-[#ece9dc] rounded-3xl p-6 h-full flex flex-col justify-between space-y-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 bg-amber-50 text-amber-700 rounded-lg"><Info className="w-4 h-4" /></span>
+                      <h4 className="text-sm font-serif font-bold text-[#2d291c]">O Fluxo de Armazenamento do Livro</h4>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed">
+                      No BookVerse, um livro não é apenas um grande bloco de texto único. Para assegurar uma paginação limpa e excelente desempenho móvel, o livro é fatiado em <strong>páginas otimizadas</strong>. 
+                      Este fatiamento respeita marcações manuais de quebra de página (<code className="bg-amber-100/50 px-1 py-0.2 rounded font-mono">---</code>) ou calcula limites de caracteres de forma a evitar interrupção de palavras.
+                    </p>
+                    <div className="bg-white border border-[#ece9dc] p-4 rounded-2xl space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-[#2d291c]">
+                        <span className="w-2 h-2 bg-[#8a7e58] rounded-full"></span>
+                        <span>Conversão de EPUB / Textos:</span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 leading-relaxed pl-4">
+                        Adicione tags <code className="bg-gray-100 px-1 py-0.2 rounded font-mono"># Capítulo X</code> para gerar sumários. O sistema paginará o livro de acordo com as especificações do leitor de forma transparente.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-zinc-900 text-zinc-300 rounded-2xl text-[11px] font-mono space-y-1">
+                    <span className="text-zinc-400 block font-sans font-bold uppercase text-[9px] mb-1">Simulação do Modelo de Dados (JSON / Firestore)</span>
+                    <div>{"{"}</div>
+                    <div className="pl-4">"id": "livro-modelo",</div>
+                    <div className="pl-4">"title": "Exemplo de Título",</div>
+                    <div className="pl-4">"pages": [</div>
+                    <div className="pl-8">"&lt;h1&gt;Capítulo I&lt;/h1&gt;&lt;p&gt;Conteúdo da página 1...&lt;/p&gt;",</div>
+                    <div className="pl-8">"&lt;p&gt;Continuação e conteúdo da página 2...&lt;/p&gt;"</div>
+                    <div className="pl-4">],</div>
+                    <div className="pl-4">"pagesCount": 2</div>
+                    <div>{"}"}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2: INTERACTIVE BOOK CONVERTER & PAGINATOR */}
+            <div className="bg-white border border-[#ece9dc] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
+              <div className="border-b border-[#ece9dc] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="text-base font-serif font-bold text-[#2d291c] flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-[#8a7e58]" />
+                    Conversor & Editor de Livro Interativo (Fatiador por Páginas)
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Escreva ou cole seu manuscrito em Markdown abaixo. Configure as regras de quebra e veja o texto se paginar instantaneamente no simulador ao lado.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                {/* Left Column: Input and configuration */}
+                <div className="xl:col-span-6 space-y-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 block mb-1">Título do Livro para Simulação</label>
+                      <input
+                        type="text"
+                        value={rawBookTitle}
+                        onChange={(e) => setRawBookTitle(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-zinc-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-zinc-500 bg-white text-zinc-950 placeholder-zinc-400"
+                        placeholder="Ex: Dom Casmurro"
+                      />
+                    </div>
+
+                    {/* Config card */}
+                    <div className="bg-gray-100/50 border border-zinc-200 p-4 rounded-2xl grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block mb-1.5">Limite de Caracteres por Página</label>
+                        <select
+                          value={pageSizeLimit}
+                          onChange={(e) => setPageSizeLimit(Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-zinc-300 rounded-xl bg-white text-xs focus:outline-none cursor-pointer text-zinc-950 focus:ring-2 focus:ring-zinc-500"
+                        >
+                          <option value="300" className="text-zinc-950">300 (Páginas Curtas / Telas Pequenas)</option>
+                          <option value="600" className="text-zinc-950">600 (Recomendado - Celular)</option>
+                          <option value="1200" className="text-zinc-950">1200 (Recomendado - Desktop/Tablet)</option>
+                          <option value="2000" className="text-zinc-950">2000 (Páginas Longas)</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col justify-center">
+                        <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block mb-2">Quebra no Título do Capítulo (#)</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="autoSplitChapters"
+                            checked={autoSplitChapters}
+                            onChange={(e) => setAutoSplitChapters(e.target.checked)}
+                            className="rounded text-[#8a7e58] focus:ring-[#8a7e58] cursor-pointer"
+                          />
+                          <label htmlFor="autoSplitChapters" className="text-xs text-gray-700 font-bold cursor-pointer">
+                            Auto-quebrar em #
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-gray-700 block">Manuscrito Original em Markdown (Permite Alterar)</label>
+                        <span className="text-[10px] text-gray-500 font-mono">{rawBookContent.length} caracteres</span>
+                      </div>
+                      <textarea
+                        value={rawBookContent}
+                        onChange={(e) => setRawBookContent(e.target.value)}
+                        className="w-full h-80 p-4 border border-zinc-300 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-zinc-500 bg-white text-zinc-950 placeholder-zinc-400"
+                        placeholder="Digite ou cole aqui o texto com marcações # de capitulo e --- de quebra de pagina..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Generated Pages & Live Simulator Preview */}
+                <div className="xl:col-span-6 space-y-6">
+                  <div className="bg-[#FAF9F5] border border-[#ece9dc] rounded-3xl p-6 space-y-5">
+                    <div className="flex items-center justify-between border-b border-[#ece9dc] pb-3">
+                      <div>
+                        <span className="text-[10px] text-[#8a7e58] font-bold uppercase tracking-wider block">Fatiamento Concluído</span>
+                        <span className="text-sm font-serif font-bold text-[#2d291c]">{generatedPages.length} Páginas Geradas</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => {
+                            setPreviewTheme('light');
+                          }}
+                          className={`w-6 h-6 rounded-full border text-[10px] font-bold cursor-pointer transition flex items-center justify-center ${
+                            previewTheme === 'light' ? 'bg-white border-[#8a7e58] text-[#8a7e58]' : 'bg-white border-gray-200 text-gray-400'
+                          }`}
+                          title="Modo Claro"
+                        >
+                          A
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPreviewTheme('sepia');
+                          }}
+                          className={`w-6 h-6 rounded-full border text-[10px] font-bold cursor-pointer transition flex items-center justify-center ${
+                            previewTheme === 'sepia' ? 'bg-[#f4ecd8] border-[#8a7e58] text-[#5c4033]' : 'bg-[#f4ecd8] border-gray-200 text-gray-400'
+                          }`}
+                          title="Modo Sepia"
+                        >
+                          S
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPreviewTheme('dark');
+                          }}
+                          className={`w-6 h-6 rounded-full border text-[10px] font-bold cursor-pointer transition flex items-center justify-center ${
+                            previewTheme === 'dark' ? 'bg-zinc-900 border-[#8a7e58] text-white' : 'bg-zinc-900 border-gray-200 text-gray-400'
+                          }`}
+                          title="Modo Escuro"
+                        >
+                          N
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Dynamic pagination index tabs */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
+                      {generatedPages.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedPreviewPage(idx)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                            selectedPreviewPage === idx
+                              ? "bg-[#8a7e58] text-white shadow-xs"
+                              : "bg-white border border-[#ece9dc] hover:bg-gray-50 text-gray-600"
+                          }`}
+                        >
+                          Pág. {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Live Page Content Editor */}
+                    <div className="space-y-3 bg-white p-4 border border-[#ece9dc] rounded-2xl">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
+                          Editar Conteúdo da Página {selectedPreviewPage + 1} Diretamente
+                        </label>
+                        <span className="text-[10px] text-emerald-600 font-bold">Edição Direta e Intuitiva</span>
+                      </div>
+                      <textarea
+                        value={generatedPages[selectedPreviewPage] || ""}
+                        onChange={(e) => {
+                          const updated = [...generatedPages];
+                          updated[selectedPreviewPage] = e.target.value;
+                          setGeneratedPages(updated);
+                          
+                          // Re-assemble raw content if edited page by page to keep it updated!
+                          const assembled = updated.join("\n---\n");
+                          setRawBookContent(assembled);
+                        }}
+                        className="w-full h-28 p-3 border border-[#ece9dc] rounded-xl text-xs font-mono focus:outline-none focus:ring-1 focus:ring-zinc-400 bg-zinc-50/30 text-zinc-800"
+                        placeholder="Adicione ou remova text para esta página..."
+                      />
+                    </div>
+
+                    {/* Simulated elegant reader frame */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Pré-visualização do Leitor do BookVerse</span>
+                      
+                      <div 
+                        className={`border border-[#ece9dc] rounded-2xl shadow-md min-h-64 p-6 relative overflow-hidden transition-colors duration-200 flex flex-col justify-between ${
+                          previewTheme === 'light' ? 'bg-white text-zinc-800' :
+                          previewTheme === 'sepia' ? 'bg-[#fbf6ec] text-[#2d2319]' :
+                          'bg-zinc-900 text-zinc-100'
+                        }`}
+                      >
+                        {/* Book Title Header */}
+                        <div className="text-[10px] border-b border-gray-200/40 pb-1.5 flex justify-between items-center tracking-wide font-sans font-bold text-gray-400 uppercase">
+                          <span>{rawBookTitle}</span>
+                          <span>Capítulo {selectedPreviewPage + 1}</span>
+                        </div>
+
+                        {/* Render Markdown on the Page */}
+                        <div 
+                          className={`py-4 flex-1 text-left prose prose-sm leading-relaxed max-w-none ${
+                            previewFontFamily === 'serif' ? 'font-serif' : 'font-sans'
+                          }`}
+                          style={{ fontSize: `${previewFontSize}px` }}
+                        >
+                          {generatedPages[selectedPreviewPage] ? (
+                            <ReactMarkdown>{generatedPages[selectedPreviewPage]}</ReactMarkdown>
+                          ) : (
+                            <p className="text-gray-400 italic">Sem conteúdo nesta página.</p>
+                          )}
+                        </div>
+
+                        {/* Footer Paging and Controls */}
+                        <div className="border-t border-gray-200/40 pt-2 flex items-center justify-between">
+                          <button
+                            disabled={selectedPreviewPage === 0}
+                            onClick={() => setSelectedPreviewPage(prev => Math.max(0, prev - 1))}
+                            className="p-1 rounded-lg hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          
+                          <span className="text-[10px] font-sans font-bold text-gray-400">
+                            Página {selectedPreviewPage + 1} de {generatedPages.length}
+                          </span>
+
+                          <button
+                            disabled={selectedPreviewPage === generatedPages.length - 1}
+                            onClick={() => setSelectedPreviewPage(prev => Math.min(generatedPages.length - 1, prev + 1))}
+                            className="p-1 rounded-lg hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Formatting adjust bar */}
+                      <div className="flex items-center justify-between text-[11px] text-gray-500 bg-white p-3 border border-[#ece9dc] rounded-2xl">
+                        <div className="flex items-center gap-3">
+                          <span>Fonte:</span>
+                          <button
+                            onClick={() => setPreviewFontFamily('serif')}
+                            className={`px-2 py-0.5 rounded ${previewFontFamily === 'serif' ? 'bg-zinc-200 font-bold' : ''}`}
+                          >
+                            Serif
+                          </button>
+                          <button
+                            onClick={() => setPreviewFontFamily('sans')}
+                            className={`px-2 py-0.5 rounded ${previewFontFamily === 'sans' ? 'bg-zinc-200 font-bold' : ''}`}
+                          >
+                            Sans
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span>Tamanho:</span>
+                          <button
+                            onClick={() => setPreviewFontSize(prev => Math.max(12, prev - 1))}
+                            className="w-5 h-5 bg-zinc-100 hover:bg-zinc-200 rounded font-bold cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span>{previewFontSize}px</span>
+                          <button
+                            onClick={() => setPreviewFontSize(prev => Math.min(20, prev + 1))}
+                            className="w-5 h-5 bg-zinc-100 hover:bg-zinc-200 rounded font-bold cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </AnimatePresence>

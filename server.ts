@@ -179,6 +179,10 @@ function readDb(): DatabaseSchema {
     }
 
     let changed = false;
+    if (!db.books || db.books.length === 0) {
+      db.books = INITIAL_BOOKS;
+      changed = true;
+    }
     if (!db.reports) {
       db.reports = DEFAULT_DB.reports;
       changed = true;
@@ -599,7 +603,7 @@ app.get("/api/auth/me/:userId", (req, res) => {
 });
 
 app.post("/api/auth/update-profile", (req, res) => {
-  const { userId, name, avatarUrl, username, bio, email, preferences, security, privacy } = req.body;
+  const { userId, name, avatarUrl, username, bio, email, preferences, security, privacy, favorites } = req.body;
   if (!userId) {
     res.status(400).json({ error: "ID do usuário é obrigatório." });
     return;
@@ -620,6 +624,7 @@ app.post("/api/auth/update-profile", (req, res) => {
   if (avatarUrl !== undefined) db.users[userIndex].avatarUrl = avatarUrl;
   if (username !== undefined) db.users[userIndex].username = username;
   if (bio !== undefined) db.users[userIndex].bio = bio;
+  if (favorites !== undefined) db.users[userIndex].favorites = favorites;
   if (email !== undefined) {
     const emailExists = db.users.some((u) => u.id !== userId && u.email.toLowerCase() === email.toLowerCase());
     if (emailExists) {
@@ -3899,10 +3904,31 @@ Responda à pergunta do administrador sobre o catálogo. Seja extremamente preci
 async function startServer() {
   console.log("[BookVerse Server] Initializing Firebase Cloud Firestore connection...");
   try {
-    const cloudDb = await pullFromFirestore();
+    let cloudDb = await pullFromFirestore();
     if (cloudDb) {
+      let isPartiallyEmpty = false;
+      if (!cloudDb.books || cloudDb.books.length === 0) {
+        console.log("[BookVerse Server] Cloud database pulled, but books list is empty. Merging with INITIAL_BOOKS...");
+        cloudDb.books = INITIAL_BOOKS;
+        isPartiallyEmpty = true;
+      }
+      if (!cloudDb.users || cloudDb.users.length === 0) {
+        cloudDb.users = DEFAULT_DB.users;
+        isPartiallyEmpty = true;
+      }
+      if (!cloudDb.progress || cloudDb.progress.length === 0) cloudDb.progress = DEFAULT_DB.progress;
+      if (!cloudDb.reviews || cloudDb.reviews.length === 0) cloudDb.reviews = DEFAULT_DB.reviews;
+      if (!cloudDb.stats || cloudDb.stats.length === 0) cloudDb.stats = DEFAULT_DB.stats;
+      if (!cloudDb.reports || cloudDb.reports.length === 0) cloudDb.reports = DEFAULT_DB.reports;
+      if (!cloudDb.logs || cloudDb.logs.length === 0) cloudDb.logs = DEFAULT_DB.logs;
+      if (!cloudDb.payments || cloudDb.payments.length === 0) cloudDb.payments = DEFAULT_DB.payments;
+
       console.log("[BookVerse Server] Successfully pulled fresh database from Cloud Firestore. Updating local cache...");
       fs.writeFileSync(DB_FILE, JSON.stringify(cloudDb, null, 2));
+
+      console.log("[BookVerse Server] Initiating migration push to Cloud Firestore to ensure new subcollection structure is populated...");
+      await pushToFirestore(cloudDb);
+      console.log("[BookVerse Server] Migration push completed successfully.");
     } else {
       console.log("[BookVerse Server] Cloud Firestore is empty. Seeding cloud database with initial schema...");
       const localDb = readDb();

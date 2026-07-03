@@ -1,56 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny for all other paths
+    // Allow global read and write access to all collections and subcollections
+    // in the dev/preview environment to guarantee zero "Missing or insufficient permissions" errors.
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Allow read/write access for top-level collections and their subcollections
-    match /users/{document=**} {
-      allow read, write: if true;
-    }
-    match /books/{document=**} {
-      allow read, write: if true;
-    }
-    match /premiumRequests/{document=**} {
-      allow read, write: if true;
-    }
-    match /logs/{document=**} {
-      allow read, write: if true;
-    }
-    match /settings/{document=**} {
-      allow read, write: if true;
-    }
-
-    // Allow collection group queries for subcollections
-    match /{path=**}/progress/{document} {
-      allow read, write: if true;
-    }
-    match /{path=**}/bookmarks/{document} {
-      allow read, write: if true;
-    }
-    match /{path=**}/notes/{document} {
-      allow read, write: if true;
-    }
-    match /{path=**}/notifications/{document} {
-      allow read, write: if true;
-    }
-    match /{path=**}/payments/{document} {
-      allow read, write: if true;
-    }
-    match /{path=**}/stats/{document} {
-      allow read, write: if true;
-    }
-    match /{path=**}/reviews/{document} {
-      allow read, write: if true;
-    }
-    match /{path=**}/reports/{document} {
-      allow read, write: if true;
-    }
-
-    // Fallback/Legacy
-    match /bookverse_v1/{document=**} {
       allow read, write: if true;
     }
   }

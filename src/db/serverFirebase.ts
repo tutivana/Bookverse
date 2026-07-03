@@ -66,57 +66,103 @@ export async function pullFromFirestore(): Promise<any> {
     };
     let foundAny = false;
 
+    // Helper helper to deduplicate by ID if present
+    const uniqueById = (arr: any[]) => {
+      const seen = new Set();
+      return arr.filter(item => {
+        if (!item) return false;
+        if (item.id === undefined) return true;
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+    };
+
     // 1. Fetch Users
     const usersSnap = await getDocs(collection(firestoreDb, "users"));
     if (!usersSnap.empty) {
       foundAny = true;
-      loadedData.users = usersSnap.docs.map(docSnap => docSnap.data());
+      const rawUsers = usersSnap.docs.map(docSnap => {
+        const data = docSnap.data();
+        // Fallbacks for display fields to maximize consistency
+        if (data.displayName && !data.name) {
+          data.name = data.displayName;
+        }
+        if (data.photoURL && !data.avatarUrl) {
+          data.avatarUrl = data.photoURL;
+        }
+        return data;
+      });
+      loadedData.users = uniqueById(rawUsers);
     }
 
     // 2. Fetch Books
     const booksSnap = await getDocs(collection(firestoreDb, "books"));
     if (!booksSnap.empty) {
       foundAny = true;
-      loadedData.books = booksSnap.docs.map(docSnap => docSnap.data());
+      const rawBooks = booksSnap.docs.map(docSnap => {
+        const data = docSnap.data();
+        // Fallbacks to maximize compatibility with original fields
+        if (data.publishedAt && !data.publishDate) {
+          data.publishDate = data.publishedAt;
+        }
+        if (data.premium !== undefined && data.accessType === undefined) {
+          data.accessType = data.premium ? "premium" : "free";
+        }
+        return data;
+      });
+      loadedData.books = uniqueById(rawBooks);
     }
 
-    // 3. Fetch Logs
+    // 3. Fetch Reports (from root collection)
+    const reportsSnap = await getDocs(collection(firestoreDb, "reports"));
+    if (!reportsSnap.empty) {
+      foundAny = true;
+      loadedData.reports = uniqueById(reportsSnap.docs.map(docSnap => docSnap.data()));
+    }
+
+    // 4. Fetch Logs (from root collection)
     const logsSnap = await getDocs(collection(firestoreDb, "logs"));
     if (!logsSnap.empty) {
       foundAny = true;
-      loadedData.logs = logsSnap.docs.map(docSnap => docSnap.data());
+      loadedData.logs = uniqueById(logsSnap.docs.map(docSnap => docSnap.data()));
     }
 
-    // 4. Fetch Premium Requests
+    // 5. Fetch Premium Requests (from root collection)
     const reqsSnap = await getDocs(collection(firestoreDb, "premiumRequests"));
     if (!reqsSnap.empty) {
       foundAny = true;
-      loadedData.premiumRequests = reqsSnap.docs.map(docSnap => docSnap.data());
+      loadedData.premiumRequests = uniqueById(reqsSnap.docs.map(docSnap => docSnap.data()));
     }
 
-    // 5. Fetch Settings
-    const settingsSnap = await getDocs(collection(firestoreDb, "settings"));
-    if (!settingsSnap.empty) {
+    // 6. Fetch Settings (from settings/app)
+    const settingsAppDoc = await getDoc(doc(firestoreDb, "settings", "app"));
+    if (settingsAppDoc.exists()) {
       foundAny = true;
-      settingsSnap.docs.forEach(docSnap => {
-        const id = docSnap.id;
-        const data = docSnap.data();
-        if (id === "prices") {
-          loadedData.subscriptionPrices = data.subscriptionPrices || { monthly: 9.99, yearly: 89.99 };
-        } else if (id === "global") {
-          loadedData.aiEnabled = data.aiEnabled !== undefined ? data.aiEnabled : true;
-        }
-      });
+      const sData = settingsAppDoc.data();
+      loadedData.subscriptionPrices = sData.subscriptionPrices || { monthly: 9.99, yearly: 89.99 };
+      loadedData.aiEnabled = sData.aiEnabled !== undefined ? sData.aiEnabled : true;
+    } else {
+      // Fallbacks to legacy/prices documents
+      const pricesDoc = await getDoc(doc(firestoreDb, "settings", "prices"));
+      if (pricesDoc.exists()) {
+        foundAny = true;
+        loadedData.subscriptionPrices = pricesDoc.data().subscriptionPrices || { monthly: 9.99, yearly: 89.99 };
+      }
+      const globalDoc = await getDoc(doc(firestoreDb, "settings", "global"));
+      if (globalDoc.exists()) {
+        foundAny = true;
+        loadedData.aiEnabled = globalDoc.data().aiEnabled !== undefined ? globalDoc.data().aiEnabled : true;
+      }
     }
 
-    // 6. Fetch subcollections via collectionGroup for modular, unlimited list capacities
+    // 7. Fetch subcollections via collectionGroup for user and book data
     const subcollections = [
       { name: "progress", targetKey: "progress" },
       { name: "bookmarks", targetKey: "bookmarks" },
       { name: "notes", targetKey: "notes" },
       { name: "reviews", targetKey: "reviews" },
       { name: "stats", targetKey: "stats" },
-      { name: "reports", targetKey: "reports" },
       { name: "notifications", targetKey: "notifications" },
       { name: "payments", targetKey: "payments" }
     ];
@@ -125,7 +171,16 @@ export async function pullFromFirestore(): Promise<any> {
       const snap = await getDocs(collectionGroup(firestoreDb, sub.name));
       if (!snap.empty) {
         foundAny = true;
-        loadedData[sub.targetKey] = snap.docs.map(docSnap => docSnap.data());
+        const rawItems = snap.docs.map(docSnap => docSnap.data());
+        loadedData[sub.targetKey] = uniqueById(rawItems);
+      }
+    }
+
+    // Fallback for reports group
+    if (loadedData.reports.length === 0) {
+      const repsGroupSnap = await getDocs(collectionGroup(firestoreDb, "reports"));
+      if (!repsGroupSnap.empty) {
+        loadedData.reports = uniqueById(repsGroupSnap.docs.map(docSnap => docSnap.data()));
       }
     }
 
@@ -149,7 +204,7 @@ export async function pushToFirestore(dbData: any): Promise<void> {
   if (!firestoreDb) return;
 
   try {
-    console.log("[pushToFirestore] Starting Cloud Firestore synchronization (Subcollections)...");
+    console.log("[pushToFirestore] Starting Cloud Firestore synchronization (New Collection Architecture)...");
 
     // Helper to delete document refs
     const safeDelete = async (ref: any) => {
@@ -162,14 +217,159 @@ export async function pushToFirestore(dbData: any): Promise<void> {
 
     // Helper to write document refs
     const safeSet = async (ref: any, data: any) => {
+      const sanitize = (val: any): any => {
+        if (val === undefined) return null;
+        if (Array.isArray(val)) return val.map(sanitize);
+        if (val !== null && typeof val === "object") {
+          const clean: any = {};
+          for (const key of Object.keys(val)) {
+            const v = val[key];
+            if (v !== undefined) {
+              clean[key] = sanitize(v);
+            }
+          }
+          return clean;
+        }
+        return val;
+      };
+
       try {
-        await setDoc(ref, data);
+        await setDoc(ref, sanitize(data));
       } catch (e) {
         console.error(`[pushToFirestore] Failed to set ref: ${ref.path}`, e);
       }
     };
 
-    // --- 1. USERS & User-specific Subcollections ---
+    // Helper to slugify names safely
+    const slugify = (text: string) => {
+      if (!text) return "unknown";
+      return text
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+    };
+
+    // --- 1. SETTINGS & STATS ---
+    // Settings: settings/app
+    const settingsAppRef = doc(firestoreDb, "settings", "app");
+    await safeSet(settingsAppRef, {
+      subscriptionPrices: dbData.subscriptionPrices || { monthly: 9.99, yearly: 89.99 },
+      aiEnabled: dbData.aiEnabled !== undefined ? dbData.aiEnabled : true
+    });
+
+    // Global stats: stats/global
+    const statsGlobalRef = doc(firestoreDb, "stats", "global");
+    const totalBooks = (dbData.books || []).length;
+    const totalUsers = (dbData.users || []).length;
+    const totalReviews = (dbData.reviews || []).length;
+    const activeReports = (dbData.reports || []).filter((r: any) => r.status === "Pending").length;
+    await safeSet(statsGlobalRef, {
+      totalBooks,
+      totalUsers,
+      totalReviews,
+      activeReports,
+      updatedAt: new Date().toISOString()
+    });
+
+    // --- 2. AUTHORS, CATEGORIES & COLLECTIONS ---
+    const books = dbData.books || [];
+    const uniqueAuthors = new Map();
+    const uniqueCategories = new Map();
+
+    for (const b of books) {
+      if (b.author) {
+        const aId = slugify(b.author);
+        uniqueAuthors.set(aId, b.author);
+      }
+      if (b.category) {
+        const cId = slugify(b.category);
+        uniqueCategories.set(cId, b.category);
+      }
+    }
+
+    // Write extracted authors
+    for (const [aId, aName] of uniqueAuthors.entries()) {
+      const authorRef = doc(firestoreDb, "authors", aId);
+      await safeSet(authorRef, {
+        id: aId,
+        name: aName,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    // Write extracted categories
+    for (const [cId, cName] of uniqueCategories.entries()) {
+      const categoryRef = doc(firestoreDb, "categories", cId);
+      await safeSet(categoryRef, {
+        id: cId,
+        name: cName,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    // --- 3. BOOKS & Book-specific Subcollections ---
+    const reviews = dbData.reviews || [];
+
+    // Clean deleted books from Firestore
+    const currentBooksSnap = await getDocs(collection(firestoreDb, "books"));
+    const localBookIds = new Set(books.map((b: any) => b.id));
+    for (const docSnap of currentBooksSnap.docs) {
+      if (!localBookIds.has(docSnap.id)) {
+        await safeDelete(docSnap.ref);
+      }
+    }
+
+    // Save existing books and their subcollections
+    for (const b of books) {
+      const bookRef = doc(firestoreDb, "books", b.id);
+      
+      const authorId = slugify(b.author);
+      const categoryId = slugify(b.category);
+
+      const bookDocData = {
+        ...b,
+        authorId,
+        categoryIds: [categoryId],
+        premium: b.accessType === "premium",
+        publishedAt: b.publishDate || "",
+        updatedAt: b.updatedAt || b.createdAt || new Date().toISOString()
+      };
+      
+      await safeSet(bookRef, bookDocData);
+
+      // Subcollection: chapters
+      if (Array.isArray(b.pdfContent)) {
+        for (let i = 0; i < b.pdfContent.length; i++) {
+          const chapRef = doc(firestoreDb, "books", b.id, "chapters", `p${i}`);
+          const summaryItem = b.summary?.find((s: any) => s.page === i);
+          await safeSet(chapRef, {
+            id: `p${i}`,
+            title: summaryItem?.title || `Página ${i + 1}`,
+            content: b.pdfContent[i],
+            pageIndex: i
+          });
+        }
+      }
+
+      // Subcollection: audiobook
+      if (Array.isArray(b.audioChapters)) {
+        for (let i = 0; i < b.audioChapters.length; i++) {
+          const audioRef = doc(firestoreDb, "books", b.id, "audiobook", `ch${i}`);
+          await safeSet(audioRef, b.audioChapters[i]);
+        }
+      }
+
+      // Subcollection: reviews
+      const bookReviews = reviews.filter((r: any) => r.bookId === b.id);
+      for (const r of bookReviews) {
+        const rRef = doc(firestoreDb, "books", b.id, "reviews", r.id);
+        await safeSet(rRef, r);
+      }
+    }
+
+    // --- 4. USERS & User-specific Subcollections ---
     const users = dbData.users || [];
     const progress = dbData.progress || [];
     const bookmarks = dbData.bookmarks || [];
@@ -188,172 +388,103 @@ export async function pushToFirestore(dbData: any): Promise<void> {
     }
 
     // Save existing users
-    for (const user of users) {
-      const userRef = doc(firestoreDb, "users", user.id);
-      await safeSet(userRef, user);
-    }
+    for (const u of users) {
+      const userRef = doc(firestoreDb, "users", u.id);
+      const userDocData = {
+        ...u,
+        displayName: u.name,
+        photoURL: u.avatarUrl || ""
+      };
+      await safeSet(userRef, userDocData);
 
-    // Clean and sync Reading Progress (subcollection users/{userId}/progress/{bookId})
-    const progressSnap = await getDocs(collectionGroup(firestoreDb, "progress"));
-    const localProgressKeys = new Set(progress.map((p: any) => `${p.userId}_${p.bookId}`));
-    for (const docSnap of progressSnap.docs) {
-      const d = docSnap.data();
-      const key = `${d.userId}_${d.bookId}`;
-      if (!localProgressKeys.has(key)) {
-        await safeDelete(docSnap.ref);
+      // Map administrative roles into the admins collection
+      if (u.role === "Super Administrador" || u.role === "Administrador" || u.role === "Moderador") {
+        const adminRef = doc(firestoreDb, "admins", u.id);
+        await safeSet(adminRef, {
+          id: u.id,
+          cargo: u.role,
+          permissões: u.role === "Super Administrador" ? ["all"] : ["moderate", "read"],
+          data_de_criação: u.createdAt || new Date().toISOString(),
+          último_acesso: u.lastAccess || new Date().toISOString(),
+          status: u.status || "Active"
+        });
       }
-    }
-    for (const p of progress) {
-      if (p.userId && p.bookId) {
-        const pRef = doc(firestoreDb, "users", p.userId, "progress", p.bookId);
+
+      // Subcollection: progress (users/{userId}/progress/{bookId})
+      const userProgress = progress.filter((p: any) => p.userId === u.id);
+      for (const p of userProgress) {
+        const pRef = doc(firestoreDb, "users", u.id, "progress", p.bookId);
         await safeSet(pRef, p);
       }
-    }
 
-    // Clean and sync Bookmarks (subcollection users/{userId}/bookmarks/{bookmarkId})
-    const bookmarksSnap = await getDocs(collectionGroup(firestoreDb, "bookmarks"));
-    const localBookmarkIds = new Set(bookmarks.map((b: any) => b.id));
-    for (const docSnap of bookmarksSnap.docs) {
-      if (!localBookmarkIds.has(docSnap.id)) {
-        await safeDelete(docSnap.ref);
-      }
-    }
-    for (const b of bookmarks) {
-      if (b.userId && b.id) {
-        const bRef = doc(firestoreDb, "users", b.userId, "bookmarks", b.id);
+      // Subcollection: bookmarks (users/{userId}/bookmarks/{bookmarkId})
+      const userBookmarks = bookmarks.filter((b: any) => b.userId === u.id);
+      for (const b of userBookmarks) {
+        const bRef = doc(firestoreDb, "users", u.id, "bookmarks", b.id);
         await safeSet(bRef, b);
       }
-    }
 
-    // Clean and sync Notes (subcollection users/{userId}/notes/{noteId})
-    const notesSnap = await getDocs(collectionGroup(firestoreDb, "notes"));
-    const localNoteIds = new Set(notes.map((n: any) => n.id));
-    for (const docSnap of notesSnap.docs) {
-      if (!localNoteIds.has(docSnap.id)) {
-        await safeDelete(docSnap.ref);
+      // Subcollection: library (users/{userId}/library/{bookId})
+      if (Array.isArray(u.favorites)) {
+        for (const favBookId of u.favorites) {
+          const favRef = doc(firestoreDb, "users", u.id, "library", favBookId);
+          await safeSet(favRef, {
+            bookId: favBookId,
+            addedAt: u.createdAt || new Date().toISOString()
+          });
+        }
       }
-    }
-    for (const n of notes) {
-      if (n.userId && n.id) {
-        const nRef = doc(firestoreDb, "users", n.userId, "notes", n.id);
+
+      // Subcollection: notes and highlights (users/{userId}/notes/{noteId} & users/{userId}/highlights/{highlightId})
+      const userNotes = notes.filter((n: any) => n.userId === u.id);
+      for (const n of userNotes) {
+        const nRef = doc(firestoreDb, "users", u.id, "notes", n.id);
+        await safeSet(nRef, n);
+        const hRef = doc(firestoreDb, "users", u.id, "highlights", n.id);
+        await safeSet(hRef, n);
+      }
+
+      // Subcollection: notifications (users/{userId}/notifications/{notifId})
+      const userNotifs = notifications.filter((n: any) => n.userId === u.id);
+      for (const n of userNotifs) {
+        const nRef = doc(firestoreDb, "users", u.id, "notifications", n.id);
         await safeSet(nRef, n);
       }
-    }
 
-    // Clean and sync Notifications (subcollection users/{userId}/notifications/{notifId})
-    const notificationsSnap = await getDocs(collectionGroup(firestoreDb, "notifications"));
-    const localNotifIds = new Set(notifications.map((n: any) => n.id));
-    for (const docSnap of notificationsSnap.docs) {
-      if (!localNotifIds.has(docSnap.id)) {
-        await safeDelete(docSnap.ref);
-      }
-    }
-    for (const n of notifications) {
-      if (n.userId && n.id) {
-        const nRef = doc(firestoreDb, "users", n.userId, "notifications", n.id);
-        await safeSet(nRef, n);
-      }
-    }
-
-    // Clean and sync Payments (subcollection users/{userId}/payments/{payId})
-    const paymentsSnap = await getDocs(collectionGroup(firestoreDb, "payments"));
-    const localPaymentIds = new Set(payments.map((p: any) => p.id));
-    for (const docSnap of paymentsSnap.docs) {
-      if (!localPaymentIds.has(docSnap.id)) {
-        await safeDelete(docSnap.ref);
-      }
-    }
-    for (const p of payments) {
-      if (p.userId && p.id) {
-        const pRef = doc(firestoreDb, "users", p.userId, "payments", p.id);
+      // Subcollection: payments (users/{userId}/payments/{payId})
+      const userPayments = payments.filter((p: any) => p.userId === u.id);
+      for (const p of userPayments) {
+        const pRef = doc(firestoreDb, "users", u.id, "payments", p.id);
         await safeSet(pRef, p);
       }
-    }
 
-    // Clean and sync Stats (subcollection users/{userId}/stats/main)
-    const statsSnap = await getDocs(collectionGroup(firestoreDb, "stats"));
-    const localStatsUserIds = new Set(stats.map((s: any) => s.userId));
-    for (const docSnap of statsSnap.docs) {
-      const d = docSnap.data();
-      if (!localStatsUserIds.has(d.userId)) {
-        await safeDelete(docSnap.ref);
-      }
-    }
-    for (const s of stats) {
-      if (s.userId) {
-        const sRef = doc(firestoreDb, "users", s.userId, "stats", "main");
-        await safeSet(sRef, s);
+      // Subcollection: stats (users/{userId}/stats/main)
+      const userStats = stats.find((s: any) => s.userId === u.id);
+      if (userStats) {
+        const sRef = doc(firestoreDb, "users", u.id, "stats", "main");
+        await safeSet(sRef, userStats);
       }
     }
 
-    // --- 2. BOOKS & Book-specific Subcollections ---
-    const books = dbData.books || [];
-    const reviews = dbData.reviews || [];
+    // --- 5. GLOBAL ROOT COLLECTIONS: REPORTS, LOGS, PREMIUM REQUESTS ---
     const reports = dbData.reports || [];
+    const logs = dbData.logs || [];
+    const premiumRequests = dbData.premiumRequests || [];
 
-    // Clean deleted books from Firestore
-    const currentBooksSnap = await getDocs(collection(firestoreDb, "books"));
-    const localBookIds = new Set(books.map((b: any) => b.id));
-    for (const docSnap of currentBooksSnap.docs) {
-      if (!localBookIds.has(docSnap.id)) {
-        await safeDelete(docSnap.ref);
-      }
-    }
-
-    // Save existing books
-    for (const b of books) {
-      const bookRef = doc(firestoreDb, "books", b.id);
-      await safeSet(bookRef, b);
-    }
-
-    // Clean and sync Reviews (subcollection books/{bookId}/reviews/{reviewId})
-    const reviewsSnap = await getDocs(collectionGroup(firestoreDb, "reviews"));
-    const localReviewIds = new Set(reviews.map((r: any) => r.id));
-    for (const docSnap of reviewsSnap.docs) {
-      if (!localReviewIds.has(docSnap.id)) {
-        await safeDelete(docSnap.ref);
-      }
-    }
-    for (const r of reviews) {
-      if (r.bookId && r.id) {
-        const rRef = doc(firestoreDb, "books", r.bookId, "reviews", r.id);
-        await safeSet(rRef, r);
-      }
-    }
-
-    // Clean and sync Book Reports (subcollection books/{bookId}/reports/{reportId})
-    const reportsSnap = await getDocs(collectionGroup(firestoreDb, "reports"));
+    // Sync Reports (reports/{reportId})
+    const currentReportsSnap = await getDocs(collection(firestoreDb, "reports"));
     const localReportIds = new Set(reports.map((r: any) => r.id));
-    for (const docSnap of reportsSnap.docs) {
+    for (const docSnap of currentReportsSnap.docs) {
       if (!localReportIds.has(docSnap.id)) {
         await safeDelete(docSnap.ref);
       }
     }
     for (const r of reports) {
-      if (r.bookId && r.id) {
-        const rRef = doc(firestoreDb, "books", r.bookId, "reports", r.id);
-        await safeSet(rRef, r);
-      }
-    }
-
-    // --- 3. AUDIT LOGS, PREMIUM REQUESTS & SETTINGS ---
-    const logs = dbData.logs || [];
-    const premiumRequests = dbData.premiumRequests || [];
-
-    // Clean and sync premiumRequests
-    const currentReqsSnap = await getDocs(collection(firestoreDb, "premiumRequests"));
-    const localReqIds = new Set(premiumRequests.map((r: any) => r.id));
-    for (const docSnap of currentReqsSnap.docs) {
-      if (!localReqIds.has(docSnap.id)) {
-        await safeDelete(docSnap.ref);
-      }
-    }
-    for (const r of premiumRequests) {
-      const rRef = doc(firestoreDb, "premiumRequests", r.id);
+      const rRef = doc(firestoreDb, "reports", r.id);
       await safeSet(rRef, r);
     }
 
-    // Clean and sync logs
+    // Sync Logs (logs/{logId})
     const currentLogsSnap = await getDocs(collection(firestoreDb, "logs"));
     const localLogIds = new Set(logs.map((l: any) => l.id));
     for (const docSnap of currentLogsSnap.docs) {
@@ -366,19 +497,21 @@ export async function pushToFirestore(dbData: any): Promise<void> {
       await safeSet(lRef, l);
     }
 
-    // Settings
-    const pricesRef = doc(firestoreDb, "settings", "prices");
-    await safeSet(pricesRef, {
-      subscriptionPrices: dbData.subscriptionPrices || { monthly: 9.99, yearly: 89.99 }
-    });
+    // Sync Premium Requests (premiumRequests/{requestId})
+    const currentReqsSnap = await getDocs(collection(firestoreDb, "premiumRequests"));
+    const localReqIds = new Set(premiumRequests.map((r: any) => r.id));
+    for (const docSnap of currentReqsSnap.docs) {
+      if (!localReqIds.has(docSnap.id)) {
+        await safeDelete(docSnap.ref);
+      }
+    }
+    for (const r of premiumRequests) {
+      const rRef = doc(firestoreDb, "premiumRequests", r.id);
+      await safeSet(rRef, r);
+    }
 
-    const globalRef = doc(firestoreDb, "settings", "global");
-    await safeSet(globalRef, {
-      aiEnabled: dbData.aiEnabled !== undefined ? dbData.aiEnabled : true
-    });
-
-    console.log("[pushToFirestore] Cloud Firestore subcollections synchronized successfully!");
+    console.log("[pushToFirestore] Cloud Firestore synchronized successfully under the new collection architecture!");
   } catch (err) {
-    console.error("[pushToFirestore Error] Failed to write to Firestore subcollections:", err);
+    console.error("[pushToFirestore Error] Failed to write to Firestore under the new collection architecture:", err);
   }
 }

@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { User, Book, ReadingProgress, ReadingStats, BookNotification } from "./types";
-import { fetchBooks, fetchUserStats, saveReadingProgress, fetchNotifications, markNotificationsAsRead } from "./lib/api";
+import { fetchBooks, fetchUserStats, saveReadingProgress, fetchNotifications, markNotificationsAsRead, updateUserProfile } from "./lib/api";
 import { isUserPremium } from "./lib/subscription";
 
 import AuthScreen from "./components/AuthScreen";
@@ -157,15 +157,23 @@ export default function App() {
       const progData = await progRes.json();
       setProgresses(progData || []);
 
-      // Simulating local favorites load
-      const savedFavs = localStorage.getItem(`bookverse_favs_${user.id}`);
-      if (savedFavs) {
-        setFavorites(JSON.parse(savedFavs));
+      // Load favorites from user profile, falling back to localStorage or seed
+      if (user.favorites && Array.isArray(user.favorites)) {
+        setFavorites(user.favorites);
+        localStorage.setItem(`bookverse_favs_${user.id}`, JSON.stringify(user.favorites));
       } else {
-        // Seed initial favorites
-        const seedFavs = ["dom-casmurro"];
-        setFavorites(seedFavs);
-        localStorage.setItem(`bookverse_favs_${user.id}`, JSON.stringify(seedFavs));
+        const savedFavs = localStorage.getItem(`bookverse_favs_${user.id}`);
+        if (savedFavs) {
+          const parsed = JSON.parse(savedFavs);
+          setFavorites(parsed);
+          // Sync with backend once if we have local but not backend
+          updateUserProfile(user.id, { favorites: parsed }).catch(console.error);
+        } else {
+          const seedFavs = ["dom-casmurro"];
+          setFavorites(seedFavs);
+          localStorage.setItem(`bookverse_favs_${user.id}`, JSON.stringify(seedFavs));
+          updateUserProfile(user.id, { favorites: seedFavs }).catch(console.error);
+        }
       }
     } catch (err) {
       console.error("Error loading user data:", err);
@@ -205,7 +213,7 @@ export default function App() {
     setCurrentView("landing");
   };
 
-  const handleToggleFavorite = (bookId: string) => {
+  const handleToggleFavorite = async (bookId: string) => {
     if (!user) return;
     const isFav = favorites.includes(bookId);
     let updated: string[];
@@ -216,6 +224,15 @@ export default function App() {
     }
     setFavorites(updated);
     localStorage.setItem(`bookverse_favs_${user.id}`, JSON.stringify(updated));
+    try {
+      const updatedUser = await updateUserProfile(user.id, { favorites: updated });
+      if (updatedUser) {
+        setUser(updatedUser);
+        localStorage.setItem("bookverse_user", JSON.stringify(updatedUser));
+      }
+    } catch (err) {
+      console.error("Error syncing favorites with server:", err);
+    }
   };
 
   const handleSelectBook = (book: Book, startInAudioMode: boolean) => {

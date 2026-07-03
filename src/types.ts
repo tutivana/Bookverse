@@ -103,12 +103,14 @@ export interface Book {
   publishDate: string;
   pdfContent: string[]; // Content of the pages (indexed 0 to pages-1)
   audioChapters?: { title: string; startPage: number; durationSeconds: number }[];
+  summary?: { title: string; page: number }[];
   // Expanded administrative fields
   status?: BookStatus; // Default to "Active"
   accessType?: "free" | "premium"; // Default to "free"
   isFeatured?: boolean; // Highlight on home page
   isbn?: string;
   keywords?: string[];
+  tags?: string[];
   createdAt?: string;
   readsCount?: number;
   favoritesCount?: number;

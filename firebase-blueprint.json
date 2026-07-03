@@ -2,94 +2,245 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "User account information and profile properties",
+      "description": "User profile and account information",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
+        "displayName": { "type": "string" },
         "email": { "type": "string" },
-        "name": { "type": "string" },
-        "status": { "type": "string" },
-        "role": { "type": "string" }
+        "photoURL": { "type": "string" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string" }
       },
-      "required": ["id", "email", "name"]
+      "required": ["email", "displayName"]
     },
     "Book": {
       "title": "Book",
-      "description": "Book details and catalog data",
+      "description": "Book details and catalog metadata",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "description": { "type": "string" },
+        "authorId": { "type": "string" },
+        "categoryIds": { "type": "array" },
+        "coverUrl": { "type": "string" },
+        "language": { "type": "string" },
+        "isbn": { "type": "string" },
+        "premium": { "type": "boolean" },
+        "price": { "type": "number" },
+        "status": { "type": "string" },
+        "pages": { "type": "integer" },
+        "publishedAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "authorId", "categoryIds", "pages"]
+    },
+    "Chapter": {
+      "title": "Chapter",
+      "description": "A textual page/chapter of a book",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "title": { "type": "string" },
-        "author": { "type": "string" },
-        "category": { "type": "string" },
-        "pages": { "type": "integer" }
+        "content": { "type": "string" },
+        "pageIndex": { "type": "integer" }
       },
-      "required": ["id", "title", "author", "category", "pages"]
+      "required": ["id", "title", "content", "pageIndex"]
     },
-    "ReadingProgress": {
-      "title": "ReadingProgress",
-      "description": "Tracks page progress and audiobook position of a user per book",
+    "AudioChapter": {
+      "title": "AudioChapter",
+      "description": "Audio chapter segment timestamps and metadata",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
-        "bookId": { "type": "string" },
-        "lastPage": { "type": "integer" }
+        "title": { "type": "string" },
+        "startPage": { "type": "integer" },
+        "durationSeconds": { "type": "integer" }
       },
-      "required": ["userId", "bookId", "lastPage"]
+      "required": ["title", "startPage", "durationSeconds"]
+    },
+    "Author": {
+      "title": "Author",
+      "description": "Author profile and bio records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Literary genre and book category metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Collection": {
+      "title": "Collection",
+      "description": "Curated shelf or reading lists",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Administrative role mapping and tracking",
+      "type": "object",
+      "properties": {
+        "cargo": { "type": "string" },
+        "permissões": { "type": "array" },
+        "data_de_criação": { "type": "string" },
+        "último_acesso": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["cargo", "status"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Content moderation flag and report logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookId": { "type": "string" },
+        "bookTitle": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "reason": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "bookId", "userId", "reason"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "Admin actions audit history log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "userId", "action", "timestamp"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global prices and system feature switches",
+      "type": "object",
+      "properties": {
+        "subscriptionPrices": { "type": "object" },
+        "aiEnabled": { "type": "boolean" }
+      },
+      "required": ["subscriptionPrices", "aiEnabled"]
+    },
+    "Stats": {
+      "title": "Stats",
+      "description": "Global aggregated stats summary",
+      "type": "object",
+      "properties": {
+        "totalBooks": { "type": "integer" },
+        "totalUsers": { "type": "integer" },
+        "totalReviews": { "type": "integer" },
+        "activeReports": { "type": "integer" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["totalBooks", "totalUsers", "updatedAt"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": "User",
-      "description": "User profile records"
-    },
-    "/users/{userId}/progress/{bookId}": {
-      "schema": "ReadingProgress",
-      "description": "Progress tracking"
-    },
-    "/users/{userId}/bookmarks/{bookmarkId}": {
-      "schema": { "$ref": "Bookmark" },
-      "description": "User bookmarked pages"
-    },
-    "/users/{userId}/notes/{noteId}": {
-      "schema": { "$ref": "HighlightAndNote" },
-      "description": "User annotated book selections"
-    },
-    "/users/{userId}/notifications/{notifId}": {
-      "schema": { "$ref": "BookNotification" },
-      "description": "In-app system and recommendation alerts"
-    },
-    "/users/{userId}/payments/{paymentId}": {
-      "schema": { "$ref": "PaymentHistoryItem" },
-      "description": "User payment records"
-    },
-    "/users/{userId}/stats/main": {
-      "schema": { "$ref": "ReadingStats" },
-      "description": "Summary stats of user reading times"
-    },
     "/books/{bookId}": {
       "schema": "Book",
-      "description": "Digital library entries"
+      "description": "Catalog entries"
+    },
+    "/books/{bookId}/chapters/{chapterId}": {
+      "schema": "Chapter",
+      "description": "Book text pages"
+    },
+    "/books/{bookId}/audiobook/{chapterId}": {
+      "schema": "AudioChapter",
+      "description": "Book audiobook chapter mappings"
     },
     "/books/{bookId}/reviews/{reviewId}": {
       "schema": { "$ref": "Review" },
-      "description": "Book discussion comments and reviews"
+      "description": "User comments and reviews"
     },
-    "/books/{bookId}/reports/{reportId}": {
-      "schema": { "$ref": "BookReport" },
-      "description": "Moderator content feedback reports"
+    "/authors/{authorId}": {
+      "schema": "Author",
+      "description": "Author details"
     },
-    "/premiumRequests/{requestId}": {
-      "schema": { "$ref": "PremiumRequest" },
-      "description": "Active plan activation requests"
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Book genres"
+    },
+    "/collections/{collectionId}": {
+      "schema": "Collection",
+      "description": "Curated lists"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users/{userId}/bookmarks/{bookId}": {
+      "schema": { "$ref": "Bookmark" },
+      "description": "Bookmarked pages"
+    },
+    "/users/{userId}/library/{bookId}": {
+      "schema": { "$ref": "LibraryItem" },
+      "description": "User bookshelf favorites"
+    },
+    "/users/{userId}/progress/{bookId}": {
+      "schema": { "$ref": "ReadingProgress" },
+      "description": "Reading progress tracking"
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": { "$ref": "HighlightAndNote" },
+      "description": "User notes"
+    },
+    "/users/{userId}/highlights/{highlightId}": {
+      "schema": { "$ref": "HighlightAndNote" },
+      "description": "User highlights"
+    },
+    "/users/{userId}/notifications/{notifId}": {
+      "schema": { "$ref": "BookNotification" },
+      "description": "Alert notifications"
+    },
+    "/users/{userId}/payments/{paymentId}": {
+      "schema": { "$ref": "PaymentHistoryItem" },
+      "description": "Billing payments logs"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Global moderation reports"
     },
     "/logs/{logId}": {
-      "schema": { "$ref": "AdminLog" },
-      "description": "Administrative actions audit history"
+      "schema": "Log",
+      "description": "Global admin audit logs"
     },
-    "/settings/{settingId}": {
-      "schema": { "$ref": "SystemSettings" },
-      "description": "Global prices and system feature switches"
+    "/settings/app": {
+      "schema": "Settings",
+      "description": "Global configurations"
+    },
+    "/stats/global": {
+      "schema": "Stats",
+      "description": "Global metrics dashboard"
+    },
+    "/admins/{adminUid}": {
+      "schema": "Admin",
+      "description": "Admins mapping list"
     }
   }
 }

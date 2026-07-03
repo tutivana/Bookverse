@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "database": "ai-studio-bookverse-a93daa9a-39c2-468f-84be-2389218873a7"
+  }
+}

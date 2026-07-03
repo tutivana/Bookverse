@@ -15,13 +15,16 @@ import {
   Settings,
   Sparkles,
   Headphones,
-  FileText
+  FileText,
+  List,
+  X
 } from "lucide-react";
 import { Book, ReadingProgress, Bookmark as BookmarkType, HighlightAndNote, User } from "../types";
 import { askGeminiAssistant } from "../lib/api";
 import BookReviews from "./BookReviews";
 import { isUserPremium } from "../lib/subscription";
 import { Lock } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 interface ReaderProps {
   book: Book;
@@ -53,6 +56,7 @@ export default function Reader({
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [notes, setNotes] = useState<HighlightAndNote[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isTocOpen, setIsTocOpen] = useState(false);
   const [activeSidebarTab, setActiveSidebarTab] = useState<"companion" | "notes" | "search" | "reviews">("companion");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ page: number; snippet: string }[]>([]);
@@ -295,6 +299,18 @@ export default function Reader({
 
   const activeTheme = themeStyles[theme];
 
+  // Table of Contents summary handling
+  const bookSummary = book.summary || [];
+  const activeTocIndex = bookSummary.reduce((bestIdx, item, idx) => {
+    const itemPageIndex = item.page - 1; // Convert to 0-index
+    if (currentPage >= itemPageIndex) {
+      if (bestIdx === -1 || itemPageIndex > (bookSummary[bestIdx].page - 1)) {
+        return idx;
+      }
+    }
+    return bestIdx;
+  }, -1);
+
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${activeTheme.outerBg} selection:bg-[#e2b874]/30`}>
       {/* Top Navbar */}
@@ -369,6 +385,22 @@ export default function Reader({
               title="Marcadores e Notas"
             >
               <BookMarked className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setIsTocOpen(!isTocOpen)}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                isTocOpen 
+                  ? theme === "escuro" 
+                    ? "bg-zinc-800 text-zinc-100" 
+                    : "bg-gray-100 text-gray-850" 
+                  : theme === "escuro" 
+                    ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
+                    : "text-gray-500 hover:bg-gray-100"
+              }`}
+              title="Sumário"
+            >
+              <List className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -475,6 +507,22 @@ export default function Reader({
           >
             <BookMarked className="w-5 h-5" />
           </button>
+
+          <button
+            onClick={() => setIsTocOpen(!isTocOpen)}
+            className={`p-2 rounded-xl transition cursor-pointer ${
+              isTocOpen 
+                ? theme === "escuro" 
+                  ? "bg-zinc-800 text-zinc-100" 
+                  : "bg-gray-100 text-gray-850" 
+                : theme === "escuro" 
+                  ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
+                  : "text-gray-500 hover:bg-gray-100"
+            }`}
+            title="Sumário"
+          >
+            <List className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
@@ -496,22 +544,115 @@ export default function Reader({
                 style={{ fontSize: `${fontSize}rem` }}
                 ref={pageTextRef}
               >
-                {/* Book text split by paragraphs */}
-                {book.pdfContent[currentPage].split("\n\n").map((para, idx) => (
-                  <p
-                    key={idx}
-                    className="mb-5 indent-6 hover:bg-[#8a7e58]/5 hover:text-[#8a7e58] p-1 rounded transition cursor-pointer"
-                    onClick={() => handleParagraphClick(para)}
+                <div className="markdown-body">
+                  <ReactMarkdown
+                    components={{
+                      h1: ({ children }) => (
+                        <h1 className={`font-serif font-bold text-2xl md:text-3xl mb-6 tracking-tight pb-3 border-b border-dashed ${
+                          theme === "escuro" ? "text-[#e2b874] border-zinc-800" : theme === "sepia" ? "text-[#544830] border-[#ebdcb3]" : "text-gray-900 border-gray-200"
+                        }`}>
+                          {children}
+                        </h1>
+                      ),
+                      h2: ({ children }) => (
+                        <h2 className={`font-serif font-bold text-lg md:text-xl mt-8 mb-4 tracking-tight ${
+                          theme === "escuro" ? "text-zinc-100" : theme === "sepia" ? "text-[#544830]" : "text-gray-800"
+                        }`}>
+                          {children}
+                        </h2>
+                      ),
+                      h3: ({ children }) => (
+                        <h3 className={`font-serif font-semibold text-base md:text-lg mt-6 mb-3 ${
+                          theme === "escuro" ? "text-zinc-200" : theme === "sepia" ? "text-[#695d46]" : "text-gray-700"
+                        }`}>
+                          {children}
+                        </h3>
+                      ),
+                      p: ({ children }) => {
+                        const textContent = React.Children.toArray(children)
+                          .map((child) => (typeof child === "string" || typeof child === "number" ? child : ""))
+                          .join("");
+                        return (
+                          <p
+                            className="mb-5 indent-6 hover:bg-[#8a7e58]/5 hover:text-[#8a7e58] p-1 rounded transition cursor-pointer text-justify"
+                            onClick={() => {
+                              if (textContent) {
+                                handleParagraphClick(textContent);
+                              }
+                            }}
+                          >
+                            {children}
+                          </p>
+                        );
+                      },
+                      strong: ({ children }) => (
+                        <strong className={`font-bold ${
+                          theme === "escuro" ? "text-[#e2b874]" : theme === "sepia" ? "text-[#8a7e58]" : "text-gray-900"
+                        }`}>
+                          {children}
+                        </strong>
+                      ),
+                      em: ({ children }) => (
+                        <em className="italic opacity-95">
+                          {children}
+                        </em>
+                      ),
+                      blockquote: ({ children }) => (
+                        <blockquote className={`pl-4 py-1.5 border-l-4 my-6 italic text-sm md:text-base rounded-r-lg ${
+                          theme === "escuro"
+                            ? "border-[#e2b874] bg-[#e2b874]/5 text-zinc-300"
+                            : theme === "sepia"
+                              ? "border-[#8a7e58] bg-[#8a7e58]/5 text-[#695c42]"
+                              : "border-[#8a7e58] bg-gray-50 text-gray-700"
+                        }`}>
+                          {children}
+                        </blockquote>
+                      ),
+                      ul: ({ children }) => (
+                        <ul className="list-disc pl-6 my-4 space-y-2 text-sm md:text-base">
+                          {children}
+                        </ul>
+                      ),
+                      ol: ({ children }) => (
+                        <ol className="list-decimal pl-6 my-4 space-y-2 text-sm md:text-base">
+                          {children}
+                        </ol>
+                      ),
+                      li: ({ children }) => (
+                        <li className="leading-relaxed">
+                          {children}
+                        </li>
+                      ),
+                      hr: () => (
+                        <hr className={`my-8 border-t ${
+                          theme === "escuro" ? "border-zinc-800" : theme === "sepia" ? "border-[#ebdcb3]" : "border-gray-200"
+                        }`} />
+                      ),
+                      a: ({ children, href }) => (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`underline transition-colors hover:opacity-80 font-medium ${
+                            theme === "escuro" ? "text-[#e2b874]" : theme === "sepia" ? "text-[#8a7e58]" : "text-blue-600"
+                          }`}
+                        >
+                          {children}
+                        </a>
+                      ),
+                      img: ({ src, alt }) => (
+                        <img
+                          src={src}
+                          alt={alt}
+                          className="mx-auto my-6 rounded-xl max-w-full h-auto shadow-md"
+                          referrerPolicy="no-referrer"
+                        />
+                      ),
+                    }}
                   >
-                    {/* Render matching local note highlights overlay */}
-                    {notes
-                      .filter((n) => n.page === currentPage && para.includes(n.selectedText))
-                      .reduce((acc, curr) => {
-                        // Highlight matches in the paragraph text
-                        return para; // simplfied render block
-                      }, para)}
-                  </p>
-                ))}
+                    {book.pdfContent[currentPage]}
+                  </ReactMarkdown>
+                </div>
               </motion.div>
             </AnimatePresence>
 
@@ -814,7 +955,9 @@ export default function Reader({
                             </span>
                             <span className="text-[9px] text-zinc-500 font-mono">Gemini-3.5-Flash</span>
                           </div>
-                          <div className="whitespace-pre-wrap">{aiResponse}</div>
+                          <div className="markdown-body text-zinc-300">
+                            <ReactMarkdown>{aiResponse}</ReactMarkdown>
+                          </div>
                         </div>
                       ) : (
                         <div className="text-center text-zinc-500 py-10 flex flex-col items-center justify-center">
@@ -980,6 +1123,158 @@ export default function Reader({
                 </div>
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Table of Contents Sliding Drawer (Left) */}
+        <AnimatePresence>
+          {isTocOpen && (
+            <>
+              {/* Backdrop Overlay */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsTocOpen(false)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 cursor-pointer"
+              />
+
+              {/* Sliding Drawer Container */}
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                className={`fixed top-0 left-0 bottom-0 h-full w-full max-w-[340px] sm:max-w-[380px] z-50 shadow-2xl flex flex-col transition-colors duration-300 ${
+                  theme === "escuro" 
+                    ? "bg-[#121214] text-zinc-100 border-r border-zinc-800" 
+                    : theme === "sepia" 
+                      ? "bg-[#fcf7e8] text-[#4a3f28] border-r border-[#ebdcb3]" 
+                      : "bg-white text-gray-900 border-r border-gray-200"
+                }`}
+              >
+                {/* Drawer Header */}
+                <div className={`p-4 md:p-5 border-b flex justify-between items-center transition-colors duration-300 ${
+                  theme === "escuro" 
+                    ? "bg-zinc-900 border-zinc-800" 
+                    : theme === "sepia" 
+                      ? "bg-[#f4ebd0] border-[#ebdcb3]" 
+                      : "bg-gray-50 border-gray-100"
+                }`}>
+                  <div>
+                    <h3 className={`font-serif font-bold text-base md:text-lg flex items-center gap-2 ${
+                      theme === "escuro" ? "text-zinc-100" : theme === "sepia" ? "text-[#4a3f28]" : "text-gray-900"
+                    }`}>
+                      <List className={`w-5 h-5 ${theme === "escuro" ? "text-[#e2b874]" : "text-[#8a7e58]"}`} />
+                      Sumário
+                    </h3>
+                    <p className={`text-[10px] md:text-xs font-serif truncate max-w-[200px] sm:max-w-[240px] mt-0.5 ${
+                      theme === "escuro" ? "text-zinc-500" : "text-gray-500"
+                    }`}>
+                      {book.title}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsTocOpen(false)}
+                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      theme === "escuro" 
+                        ? "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800" 
+                        : "text-gray-400 hover:text-gray-700 hover:bg-gray-200/50"
+                    }`}
+                    title="Fechar Sumário"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Drawer Body (Scrollable List) */}
+                <div className="flex-grow overflow-y-auto p-4 md:p-5 space-y-1 scrollbar-thin">
+                  {bookSummary.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center px-4 space-y-3">
+                      <FileText className={`w-12 h-12 stroke-1 ${theme === "escuro" ? "text-zinc-700" : "text-gray-300"}`} />
+                      <div>
+                        <p className={`text-sm font-semibold ${theme === "escuro" ? "text-zinc-400" : "text-gray-700"}`}>
+                          Este livro não possui um sumário disponível.
+                        </p>
+                        <p className={`text-xs mt-1 max-w-[240px] ${theme === "escuro" ? "text-zinc-500" : "text-gray-400"}`}>
+                          Use as setas de navegação no rodapé ou a barra de páginas para folhear o livro.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setIsTocOpen(false)}
+                        className={`mt-4 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition ${
+                          theme === "escuro"
+                            ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-100"
+                            : "bg-gray-100 hover:bg-gray-200 text-gray-800"
+                        }`}
+                      >
+                        Entendido
+                      </button>
+                    </div>
+                  ) : (
+                    bookSummary.map((item, idx) => {
+                      const isActive = idx === activeTocIndex;
+                      const itemPageIndex = item.page - 1;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            handlePageChange(itemPageIndex);
+                            setIsTocOpen(false);
+                          }}
+                          className={`w-full text-left p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-between border ${
+                            isActive
+                              ? theme === "escuro"
+                                ? "bg-[#e2b874]/10 text-[#e2b874] border-[#e2b874]/30 font-bold border-l-4 border-l-[#e2b874]"
+                                : theme === "sepia"
+                                  ? "bg-[#8a7e58]/15 text-[#8a7e58] border-[#8a7e58]/30 font-bold border-l-4 border-l-[#8a7e58]"
+                                  : "bg-[#8a7e58]/10 text-[#8a7e58] border-[#8a7e58]/25 font-bold border-l-4 border-l-[#8a7e58]"
+                              : theme === "escuro"
+                                ? "bg-zinc-900/20 hover:bg-zinc-850/60 border-zinc-900/50 text-zinc-300 hover:text-zinc-100"
+                                : theme === "sepia"
+                                  ? "bg-[#fbf6e3]/30 hover:bg-[#ebdcae]/40 border-[#f5ebcb]/30 text-[#544830] hover:text-[#2d291c]"
+                                  : "bg-gray-50 hover:bg-gray-100 border-gray-100 text-gray-700 hover:text-gray-900"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            {isActive && (
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                theme === "escuro" ? "bg-[#e2b874]" : "bg-[#8a7e58]"
+                              }`} />
+                            )}
+                            <span className="truncate text-xs md:text-sm font-medium leading-snug">
+                              {item.title}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] md:text-xs font-mono font-semibold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                            isActive
+                              ? theme === "escuro"
+                                ? "bg-[#e2b874]/20 text-[#e2b874]"
+                                : "bg-[#8a7e58]/20 text-[#8a7e58]"
+                              : theme === "escuro"
+                                ? "bg-zinc-800 text-zinc-500"
+                                : "bg-gray-200/60 text-gray-500"
+                          }`}>
+                            Pág {item.page}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Drawer Footer */}
+                <div className={`p-4 border-t text-center text-[10px] md:text-xs font-medium transition-colors duration-300 ${
+                  theme === "escuro" 
+                    ? "bg-zinc-900 border-zinc-800 text-zinc-500" 
+                    : theme === "sepia" 
+                      ? "bg-[#f4ebd0] border-[#ebdcb3] text-[#807255]" 
+                      : "bg-gray-50 border-gray-100 text-gray-500"
+                }`}>
+                  Progresso de Leitura: <span className="font-mono font-bold text-xs ml-1">{Math.round((currentPage + 1) / book.pages * 100)}%</span>
+                </div>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </div>

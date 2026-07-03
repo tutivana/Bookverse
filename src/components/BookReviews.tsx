@@ -284,7 +284,7 @@ export default function BookReviews({ bookId, userId, user }: BookReviewsProps) 
               {avgRating > 0 ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <Star 
-                    key={i} 
+                    key={`star-avg-${i}`} 
                     className={`w-3.5 h-3.5 ${i < Math.round(avgRating) ? "fill-amber-500 text-amber-500" : "text-zinc-600"}`} 
                   />
                 ))
@@ -333,7 +333,7 @@ export default function BookReviews({ bookId, userId, user }: BookReviewsProps) 
               {Array.from({ length: 5 }).map((_, i) => (
                 <button
                   type="button"
-                  key={i}
+                  key={`star-rating-btn-${i}`}
                   onClick={() => setRating(i + 1)}
                   className="text-amber-500 hover:scale-110 transition cursor-pointer"
                 >
@@ -434,7 +434,7 @@ export default function BookReviews({ bookId, userId, user }: BookReviewsProps) 
                         {Array.from({ length: 5 }).map((_, i) => (
                           <button
                             type="button"
-                            key={i}
+                            key={`star-edit-btn-${i}`}
                             onClick={() => setEditingRating(i + 1)}
                             className="text-amber-500"
                           >
