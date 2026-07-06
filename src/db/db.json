@@ -1,0 +1,1497 @@
+{
+  "users": [
+    {
+      "name": "Tuto José",
+      "photoURL": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop",
+      "lastAccess": "2026-07-03T05:50:46.858Z",
+      "subscription": {
+        "plan": "PREMIUM",
+        "expiresAt": "2026-08-02T05:50:46.858Z",
+        "autoRenew": true,
+        "paymentMethod": {
+          "brand": "visa",
+          "last4": "4242"
+        },
+        "billingInterval": "monthly",
+        "status": "active"
+      },
+      "email": "tutojose1@gmail.com",
+      "isBannedFromCommenting": false,
+      "booksReadCount": 3,
+      "activities": [
+        {
+          "timestamp": "2026-07-03T05:50:46.858Z",
+          "action": "Login no sistema"
+        }
+      ],
+      "status": "Active",
+      "createdAt": "2026-07-03T05:50:46.858Z",
+      "displayName": "Tuto José",
+      "avatarUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop",
+      "reportsMadeCount": 0,
+      "id": "demo-user",
+      "favorites": [
+        "dom-casmurro"
+      ],
+      "role": "Super Administrador"
+    },
+    {
+      "id": "user-0n4jmtkf9",
+      "favorites": [],
+      "role": "Moderador",
+      "createdAt": "2026-07-03T15:38:30.663Z",
+      "displayName": "Ana Madalena",
+      "reportsMadeCount": 0,
+      "avatarUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Ana%20Madalena",
+      "activities": [
+        {
+          "action": "Login no sistema",
+          "timestamp": "2026-07-03T15:38:30.663Z"
+        }
+      ],
+      "status": "Active",
+      "subscription": {
+        "paymentMethod": {
+          "last4": "Aprov",
+          "brand": "Manual/Pix"
+        },
+        "billingInterval": "monthly",
+        "status": "active",
+        "autoRenew": true,
+        "expiresAt": "2026-08-02T21:17:24.244Z",
+        "plan": "PREMIUM"
+      },
+      "photoURL": "https://api.dicebear.com/7.x/adventurer/svg?seed=Ana%20Madalena",
+      "name": "Ana Madalena",
+      "lastAccess": "2026-07-03T15:38:30.664Z",
+      "isBannedFromCommenting": false,
+      "booksReadCount": 0,
+      "email": "desouzaanamadalena@gmail.com"
+    }
+  ],
+  "books": [
+    {
+      "author": "Franz Kafka",
+      "favoritesCount": 31,
+      "audiobookAvailable": true,
+      "pdfContent": [
+        "# Capítulo I - A transformação de Gregor\n\nQuando Gregor Samsa despertou, certa manhã, de um sonho agitado, viu-se em sua cama transformado em um **inseto monstruoso**. Deitara-se de costas, que eram duras como uma couraça, e, ao erguer um pouco a cabeça, viu seu ventre abaulado, escuro, dividido por nervuras arqueadas.\n\n---\n\n## O Novo Estado de Gregor\nAs suas numerosas pernas, lamentavelmente finas em comparação com o resto do seu corpo, vibravam sem controle diante de seus olhos.\n\n> \"O que aconteceu comigo?\", pensou ele.\n\nNão era um sonho. O seu quarto, um verdadeiro quarto de ser humano, embora um pouco pequeno, permanecia tranquilo entre as quatro paredes familiares.",
+        "# Capítulo II - O relógio e o trabalho\n\nGregor olhou para a janela. O tempo chuvoso — ouviam-se as gotas batendo no zinco da calha — deixava-o bastante melancólico.\n\n> \"Que tal se eu dormisse mais um pouco e esquecesse todas estas bobagens?\"\n\nPensou. Mas isso era totalmente impossível, pois ele estava habituado a dormir do lado direito, e em seu estado atual não conseguia adotar essa posição.\n\n---\n\n## O Compromisso com a Firma\n- Olhou para o despertador que tiquetaqueava na mesa de cabeceira: **Meu Deus! Eram seis horas e meia.**\n- Os ponteiros continuavam a avançar. Já passava da hora!\n- O trem das sete deveria ser pego, e para isso Gregor precisaria se apressar extraordinariamente.\n- A sua ausência provocaria as maiores suspeitas no escritório, já que ele **nunca faltara em cinco anos** de serviço.",
+        "# Capítulo III - A voz da família\n\nEnquanto Gregor pensava em tudo isso com a máxima pressa, sem conseguir se decidir a sair da cama, bateu de leve na porta da cabeceira de sua cama a sua mãe:\n\n> \"Gregor, são seis e quinze. Você não vai viajar?\"\n\nQue voz doce! Gregor assustou-se ao ouvir a própria voz responder.\n\n---\n\n## A Mudança de Voz\nEra, sem dúvida, a sua voz anterior, mas misturada com um **sibilar doloroso**, que vinha do fundo de sua garganta, e que só deixava as palavras claras no primeiro instante para depois destruí-las.\n\n*\"Sim, sim, obrigado, mãe, já estou me levantando\"*, disse Gregor. Através da porta de madeira, a mudança na voz não foi percebida lá fora, e sua mãe retirou-se tranquila.",
+        "# Capítulo IV - O gerente chega\n\nInfelizmente, a tranquilidade não durou muito. Pouco depois das sete, a campainha da casa tocou. Era o **gerente da firma** de Gregor, que viera pessoalmente cobrar a sua ausência. A família entrou em pânico, implorando para que Gregor abrisse a porta do quarto.\n\n---\n\n## A Revelação do Absurdo\nGregor arrastou seu corpo pesado até a porta, usando suas mandíbulas para girar a chave na fechadura. Quando a porta finalmente se abriu e ele apareceu:\n\n1. O gerente soltou um *\"Oh!\"* de pavor e cobriu a boca com a mão.\n2. Sua mãe caiu de joelhos.\n3. Seu pai cerrou os punhos com agressividade.\n\n> Gregor compreendeu que sua vida nunca mais seria a mesma."
+      ],
+      "createdAt": "2026-06-29T10:05:00.881Z",
+      "pages": 4,
+      "premium": false,
+      "aiAnalysis": {
+        "potentialPopularity": {
+          "retentionProbability": "Média",
+          "relevanceIndex": 83,
+          "interestTrend": "Estável (Clássico)",
+          "readingPotential": "Alto"
+        },
+        "processedAt": "2026-07-03T19:55:06.642Z",
+        "suggestedMetadata": {
+          "alternativeTitle": "Edição Premium: A Metamorfose",
+          "estimatedYear": "1915",
+          "description": "Esta primorosa edição de \"A Metamorfose\", escrita por Franz Kafka, foi revisada eletronicamente para oferecer a melhor experiência digital aos assinantes do BookVerse.\n\nA obra permanece como um testemunho fundamental de seu gênero, cativando leitores com sua rica prosa.",
+          "shortSummary": "Análise profunda e rica sob a ótica inigualável do autor Franz Kafka.",
+          "detectedLanguage": "Português",
+          "fullSummary": "\"A Metamorfose\" explora os dilemas morais de seus protagonistas em um cenário finamente desenhado por Franz Kafka. Através de capítulos bem cadenciados, o autor desenvolve reflexões profundas que convidam o leitor a desvendar os mistérios da trama.",
+          "keywords": [
+            "ficção",
+            "franz",
+            "clássico",
+            "leitura recomendada"
+          ]
+        },
+        "qualityMetrics": {
+          "duplicatedPages": false,
+          "inconsistentFormatting": false,
+          "unreadableFile": false,
+          "lowPdfQuality": false,
+          "details": "Análise eletrônica de catálogo concluída. Integridade estrutural do arquivo verificada com sucesso.",
+          "corruptedText": false,
+          "inappropriateContent": false,
+          "status": "OK"
+        },
+        "featuredSuggestions": {
+          "campaignIdea": "Especial do Mês: Franz Kafka",
+          "recommendationReason": "Relevância cultural expressiva no catálogo do BookVerse.",
+          "homepageSuitability": "Alta",
+          "trendingPotential": true
+        },
+        "suggestedCategories": [
+          "Ficção",
+          "Ficção"
+        ],
+        "autoTags": {
+          "emotions": [
+            "Inquietude",
+            "Empatia",
+            "Melancolia"
+          ],
+          "themes": [
+            "Reflexão Humana",
+            "Sociedade",
+            "Cultura",
+            "Clássico"
+          ],
+          "complexity": "Média",
+          "targetAudience": "Adulto / Geral"
+        }
+      },
+      "status": "Inactive",
+      "publishDate": "1915",
+      "isbn": "978-85-302-402",
+      "isFeatured": false,
+      "language": "Português",
+      "readsCount": 70,
+      "updatedAt": "2026-06-29T10:05:00.881Z",
+      "categoryIds": [
+        "ficcao"
+      ],
+      "coverUrl": "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop",
+      "publishedAt": "1915",
+      "accessType": "free",
+      "ratingsCount": 11,
+      "title": "A Metamorfose",
+      "keywords": [
+        "ficção",
+        "franz"
+      ],
+      "id": "a-metamorfose",
+      "listenersCount": 28,
+      "category": "Psicologia",
+      "summary": [
+        {
+          "page": 1,
+          "title": "Capítulo I - A transformação de Gregor"
+        },
+        {
+          "page": 2,
+          "title": "Capítulo II - O relógio e o trabalho"
+        },
+        {
+          "page": 3,
+          "title": "Capítulo III - A voz da família"
+        },
+        {
+          "title": "Capítulo IV - O gerente chega",
+          "page": 4
+        }
+      ],
+      "estimatedReadTime": "40m",
+      "audioDuration": "1h 00m",
+      "authorId": "franz-kafka",
+      "avgRating": 4.5,
+      "history": [
+        {
+          "timestamp": "2026-06-29T10:05:00.881Z",
+          "reason": "Importação inicial do sistema.",
+          "id": "hist-seed-2",
+          "adminName": "Tuto José",
+          "action": "Criação de Livro",
+          "adminId": "demo-user"
+        }
+      ],
+      "description": "Gregor Samsa, um caixeiro-viajante, acorda certa manhã e se descobre transformado em um inseto monstruoso. Uma narrativa brilhante, claustrofóbica e tragicômica sobre a alienação moderna, as pressões familiares e o absurdo da existência humana.",
+      "audioChapters": [
+        {
+          "startPage": 0,
+          "title": "Capítulo I - A transformação",
+          "durationSeconds": 180
+        },
+        {
+          "title": "Capítulo II - O relógio e o trabalho",
+          "startPage": 1,
+          "durationSeconds": 200
+        },
+        {
+          "durationSeconds": 160,
+          "startPage": 2,
+          "title": "Capítulo III - A voz da família"
+        },
+        {
+          "durationSeconds": 220,
+          "title": "Capítulo IV - O gerente chega",
+          "startPage": 3
+        }
+      ],
+      "copyright": {
+        "status": "public_domain",
+        "licenseType": "creative_commons"
+      }
+    },
+    {
+      "coverUrl": "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop",
+      "language": "Português",
+      "categoryIds": [
+        "classico"
+      ],
+      "readsCount": 20,
+      "updatedAt": "2026-06-25T14:27:45.210Z",
+      "id": "book-whtepgmsz",
+      "keywords": [
+        "clássico",
+        "robert"
+      ],
+      "listenersCount": 0,
+      "publishedAt": "2026",
+      "title": "48 leis do Poder",
+      "ratingsCount": 7,
+      "accessType": "free",
+      "estimatedReadTime": "5 min",
+      "authorId": "robert-greene",
+      "category": "Desenvolvimento Pessoal",
+      "summary": [
+        {
+          "page": 1,
+          "title": "PREFÁCIO"
+        }
+      ],
+      "avgRating": 4.2,
+      "history": [
+        {
+          "action": "Criação de Livro",
+          "adminName": "Tuto José",
+          "adminId": "demo-user",
+          "reason": "Importação inicial do sistema.",
+          "id": "hist-seed-4",
+          "timestamp": "2026-06-25T14:27:45.210Z"
+        },
+        {
+          "adminName": "Tuto José",
+          "action": "Alteração de Status para Draft",
+          "adminId": "demo-user",
+          "timestamp": "2026-07-03T19:28:04.143Z",
+          "changes": [
+            {
+              "new": "Draft",
+              "field": "status",
+              "old": "Active"
+            }
+          ],
+          "id": "hist-80urfg6qt",
+          "reason": "Aprovado no controle de qualidade"
+        },
+        {
+          "adminId": "demo-user",
+          "adminName": "Tuto José",
+          "action": "Alteração de Status para Active",
+          "timestamp": "2026-07-03T19:40:04.304Z",
+          "changes": [
+            {
+              "new": "Active",
+              "field": "status",
+              "old": "Draft"
+            }
+          ],
+          "reason": "Nenhum motivo fornecido.",
+          "id": "hist-ey5iojrme"
+        },
+        {
+          "timestamp": "2026-07-04T01:16:35.379Z",
+          "id": "hist-bbfrrm7t2",
+          "reason": "Nenhum motivo fornecido.",
+          "changes": [
+            {
+              "new": "Draft",
+              "old": "Active",
+              "field": "status"
+            }
+          ],
+          "adminName": "Tuto José",
+          "action": "Alteração de Status para Draft",
+          "adminId": "demo-user"
+        },
+        {
+          "adminName": "Tuto José",
+          "action": "Alteração de Status para Active",
+          "adminId": "demo-user",
+          "timestamp": "2026-07-04T01:35:49.724Z",
+          "changes": [
+            {
+              "new": "Active",
+              "old": "Draft",
+              "field": "status"
+            }
+          ],
+          "reason": "Nenhum motivo fornecido.",
+          "id": "hist-7uswxhe3y"
+        }
+      ],
+      "description": "Teste",
+      "createdAt": "2026-06-25T14:27:45.210Z",
+      "pdfContent": [
+        "# PREFÁCIO\nA sensação de não ter nenhum poder sobre pessoas e acontecimentos é, em geral, insuportável — quando nos sentimos impotentes, ficamos infelizes. Ninguém quer menos poder; todos querem mais. No mundo atual, entretanto, é perigoso parecer ter muita fome de poder, ser muito premeditado nos seus movimentos para conquistar o poder. Temos de parecer justos e decentes. Por conseguinte precisamos ser sutis - agradáveis porém astutos, democráticos mas não totalmente honestos.\n\nEste jogo de constante duplicidade mais se assemelha à dinâmica de poder que existia no\nmundo ardiloso da antiga corte aristocrática. Em toda a história, sempre houve uma corte\nformada em torno de uma pessoa no poder — rei, rainha, imperador, líder. Os cortesãos que\ncompunham esta corte ficavam numa posição muito delicada: tinham de servir aos seus\nsenhores, mas, se a bajulação fosse muito óbvia, os outros cortesãos notariam e agiriam contra eles. As tentativas de agradar ao senhor, portanto, tinham de ser sutis. E até mesmo os cortesãos hábeis e capazes de tal sutileza ainda tinham de se proteger de seus companheiros que a todo momento tramavam tirá-los do caminho.Enquanto isso, supunha-se que a corte representasse o auge da civilização e do refinamento. Desaprovavam-se as atitudes violentas ou declaradas de poder; os cortesãos trabalhavam em silêncio e sigilosamente contra aquele entre eles que usasse a força. Este era o dilema do cortesão: aparentando ser o próprio modelo de elegância, ele tinha ao mesmo tempo de ser o mais esperto e frustrar os movimentos dos seus adversários da maneira mais sutil possível. Com o tempo, o cortesão bem-sucedido aprendia a agir sempre de forma indireta; se apunhalava o adversário pelas costas, era com luva de pelica na mão e, no rosto, o mais gentil dos sorrisos. Em vez de coagir ou trair explicitamente, o cortesão perfeito conseguia o que queria seduzindo, usando o",
+        "charme, a fraude e as estratégias sutis, sempre planejando várias ações com antecedência. A vida na corte era um jogo interminável que exigia vigilância constante e pensamento tático. Era uma guerra civilizada.\n\nHoje enfrentamos um paradoxo peculiarmente semelhante ao do cortesão: tudo deve parecer\ncivilizado, decente, democrático e justo. Mas se obedecemos com muita rigidez a essas\nregras, se as tomamos de uma forma por demais literal, somos esmagados pelos que estão ao nosso redor e que não são assim tão tolos. Como escreveu o grande cortesão e diplomata renascentista, Nicolau Maquiavel, > “O homem que tenta ser bom o tempo todo está fadado à ruína entre os inúmeros outros que não são bons”.\nA corte se imaginava o pináculo do refinamento, mas sob a superfície cintilante fervilhava um caldeirão de emoções escusas —\nganância, inveja, luxúria, ódio. Nosso mundo, hoje, igualmente se imagina o pináculo da\njustiça, mas as mesmas feias emoções continuam fervendo dentro de nós, como sempre. O jogo é o mesmo. Por fora, você deve aparentar que é uma pessoa de escrúpulos, mas, por dentro, a não ser que você seja um tolo, vai aprender logo a fazer o que Napoleão aconselhava: calçar a sua mão de ferro com uma luva de veludo. Se, como o cortesão de idos tempos, você for capaz de dominar a arte da dissimulação, aprendendo a seduzir, encantar, enganar e sutilmente passar a perna nos seus adversários, você alcançará os píncaros do poder. Vai conseguir dobrar as pessoas sem que elas percebam o que você está fazendo. E se elas não percebem o que você está fazendo, também não ficarão ressentidas nem lhe oferecerão resistência. Para algumas pessoas, a idéia de participar conscientemente de jogos de poder — não importa se de forma indireta ou não — parece maldade, pouco social, uma relíquia do passado. Elas acreditam que podem optar por ficar fora do jogo, comportando-se como se não tivessem nada a ver com o poder. É preciso cuidado com pessoas assim, pois embora exteriorizem essas opiniões, com freqüência são as maiores especialistas no jogo do poder. Utilizam estratégias que disfarçam com habilidade a natureza manipuladora. Tais tipos, por exemplo, costumam exibir a sua fraqueza e falta de poder como uma espécie de virtude moral. Mas a verdadeira impotência, sem que haja um motivo de interesse pessoal, não divulga a sua própria fraqueza para conquistar respeito ou simpatia. Alardear a própria fraqueza e na verdade uma estratégia muito eficaz, sutil e fraudulenta, no jogo de poder (ver Lei 22, a Tática da Rendição). Outra estratégia daquele que se diz fora do jogo é a de exigir igualdade em todas as áreas da vida.\nTodos têm de ser tratados igualmente, seja qual for o seu status ou força. Mas se, para evitar o estigma do poder, você quiser tratar todos com igualdade e justiça, vai se defrontar com o problema de que algumas pessoas fazem certas coisas melhor do que outras. Tratar a todos igualmente significa ignorar as suas diferenças, elevar o patamar dos menos capazes e rebaixar o daqueles que se sobressaem. Mais uma vez, muitos dos que se comportam assim estão na verdade usando uma outra estratégia de poder, redistribuindo os prêmios da maneira como eles próprios determinam."
+      ],
+      "tags": [],
+      "author": "Robert Greene",
+      "audiobookAvailable": false,
+      "favoritesCount": 17,
+      "premium": false,
+      "pages": 2,
+      "aiAnalysis": {
+        "qualityMetrics": {
+          "unreadableFile": false,
+          "duplicatedPages": false,
+          "inconsistentFormatting": false,
+          "inappropriateContent": false,
+          "status": "OK",
+          "details": "Análise eletrônica de catálogo concluída. Integridade estrutural do arquivo verificada com sucesso.",
+          "lowPdfQuality": false,
+          "corruptedText": false
+        },
+        "suggestedMetadata": {
+          "detectedLanguage": "Português",
+          "description": "Esta primorosa edição de \"48 leis do Poder\", escrita por Robert Greene, foi revisada eletronicamente para oferecer a melhor experiência digital aos assinantes do BookVerse.\n\nA obra permanece como um testemunho fundamental de seu gênero, cativando leitores com sua rica prosa.",
+          "shortSummary": "Análise profunda e rica sob a ótica inigualável do autor Robert Greene.",
+          "estimatedYear": "2026",
+          "alternativeTitle": "Edição Premium: 48 leis do Poder",
+          "keywords": [
+            "clássico",
+            "robert",
+            "clássico",
+            "leitura recomendada"
+          ],
+          "fullSummary": "\"48 leis do Poder\" explora os dilemas morais de seus protagonistas em um cenário finamente desenhado por Robert Greene. Através de capítulos bem cadenciados, o autor desenvolve reflexões profundas que convidam o leitor a desvendar os mistérios da trama."
+        },
+        "processedAt": "2026-07-03T19:55:06.642Z",
+        "potentialPopularity": {
+          "relevanceIndex": 86,
+          "interestTrend": "Estável (Clássico)",
+          "retentionProbability": "Média",
+          "readingPotential": "Alto"
+        },
+        "autoTags": {
+          "themes": [
+            "Reflexão Humana",
+            "Sociedade",
+            "Cultura",
+            "Clássico"
+          ],
+          "complexity": "Média",
+          "targetAudience": "Adulto / Geral",
+          "emotions": [
+            "Inquietude",
+            "Empatia",
+            "Melancolia"
+          ]
+        },
+        "suggestedCategories": [
+          "Clássico",
+          "Ficção"
+        ],
+        "featuredSuggestions": {
+          "campaignIdea": "Especial do Mês: Robert Greene",
+          "homepageSuitability": "Alta",
+          "recommendationReason": "Relevância cultural expressiva no catálogo do BookVerse.",
+          "trendingPotential": true
+        }
+      },
+      "isFeatured": false,
+      "status": "Draft",
+      "publishDate": "2026",
+      "isbn": "978-85-304-404",
+      "copyright": {
+        "status": "commercial",
+        "licenseType": "purchase_required"
+      }
+    },
+    {
+      "favoritesCount": 45,
+      "audiobookAvailable": true,
+      "author": "Machado de Assis",
+      "pdfContent": [
+        "# Capítulo I - Do título\n\nUma noite destas, vindo da cidade para o Engenho Novo, encontrei no trem da Central um rapaz aqui do bairro, que eu conheço de vista e de chapéu. Cumprimentou-me, sentou-se ao pé de mim, falou do tempo, dos partidos e dos bondes, e acabou por me perguntar se eu continuava a escrever no jornal. Respondi-lhe que sim. Ele então começou a recitar-me uns versos, que dizia serem seus, mas que eu vi logo que eram de outro. Eu não disse nada, mas ele percebeu o meu desdém e resolveu vingar-se de mim. Chamou-me de **'Dom Casmurro'**.\n\n---\n\n## O que significa ser Casmurro?\n\nNão consultes dicionários. *Casmurro* não está aqui no sentido que eles lhe dão, mas no que lhe pôs o vulgo de:\n> homem calado e metido consigo.\n\n*Dom* veio por ironia, para imputar-me ares de fidalgo. Tudo por estar calado e não ouvir os versos dele. O apelido pegou, e é por isso que dou este título ao meu livro.",
+        "# Capítulo II - Do livro\n\nO meu fim principal é atar as duas pontas da vida, e restaurar na velhice a adolescência. Pois, senhor, não consegui recompor o que foi nem o que fui. Em tudo, se a cara é a mesma, a fisionomia é outra. Se a minha memória guarda os fatos, a sensação deles escapou-me. Se eu pudesse reviver aqueles dias, juro que não escreveria uma só linha deste livro. Mas não posso. Falta-me o vigor, a fé, a ilusão doce que doura a juventude.\n\n---\n\n## Motivações do Autor\nComo não fiz o que desejava, que era viver aqueles anos de novo, ponho no papel o que me resta na lembrança. Talvez assim eu consiga sentir de novo um pouco daquela felicidade antiga, ainda que seja apenas por reflexo.\n\n### Para quem escrevo?\n- Escrevo para mim.\n- Para os poucos amigos que me restam, *se é que me resta algum*.",
+        "# Capítulo III - A denúncia\n\nIa a entrar na sala de visitas, quando ouvi proferir o meu nome e escondi-me atrás da porta. Era a voz de **José Dias**, o nosso agregado, que falava com minha mãe, **Dona Glória**:\n\n> \"Dona Glória, a senhora precisa mandar o Bentinho para o seminário. Ele está crescendo e o projeto de fazê-lo padre não deve ser esquecido. Além disso, ele anda muito tempo com a filha do Pádua, a Capitu. Eles estão sempre juntos, cochichando pelos cantos. É preciso cortar isso antes que seja tarde.\"\n\n---\n\n## O Impacto da Denúncia\nMinha mãe estremeceu. Ela fizera uma promessa de me fazer padre se eu nascesse homem e vivesse. A denúncia de José Dias caiu como uma bomba no meu coração.\n\n### Fatos importantes:\n1. Eu tinha então **quinze anos**, e Capitu, **quatorze**.\n2. Até aquele momento, eu não sabia que a amava.\n3. A simples ideia de ser separado dela e mandado para um seminário revelou-me a verdade.",
+        "# Capítulo IV - A promessa de Dona Glória\n\nMinha mãe era uma santa mulher, viúva desde muito jovem, que vivia para cuidar de mim e da nossa casa. A promessa que fizera era o seu grande fardo e a sua grande devoção. José Dias sabia disso e usava essa promessa para manter sua influência sobre nós.\n\n## Perfil de José Dias\nEle era um homem culto, que falava por *superlativos*, sempre elogiando tudo e todos, mas que no fundo sabia manipular as fraquezas humanas.\n\n---\n\n> \"Quando ouvi minha mãe concordar que era hora de me mandar para o seminário, meu world desabou.\"\n\nCorri para o quintal, para o nosso refúgio perto do muro que separava a nossa casa da de Capitu. Eu precisava vê-la, precisava contar-lhe o que estava acontecendo. Nós precisávamos encontrar uma saída juntos.",
+        "# Capítulo V - O muro e o quintal\n\nO quintal de nossa casa era grande, cheio de árvores frutíferas. Ao fundo, um muro baixo nos separava da casa de Pádua, um modesto funcionário público, pai de Capitu. Esse muro era o nosso ponto de encontro. Nós costumávamos conversar por cima dele, trocar bilhetes e planejar nossas pequenas travessuras.\n\n---\n\n## O Retrato de Capitu\nCapitu era uma menina extraordinária, com **olhos de ressaca**, como diria mais tarde José Dias:\n> olhos que pareciam uma onda que avança e recua, engolindo quem os olhasse.\n\n### Características de Capitu:\n- Inteligência viva, superior à minha.\n- Determinada e corajosa.\n- Enigmática e confiante.\n\n\"Não chore, Bentinho\", disse ela, segurando minha mão sobre o muro. \"Nós vamos dar um jeito. Você não vai ser padre.\"",
+        "# Capítulo VI - Os olhos de ressaca\n\nTive medo de olhar para Capitu, mas olhei. Ela olhava para mim com uma expressão de tamanha força e decisão que me senti pequeno perto dela. Seus *olhos de ressaca* me atraíam e me assustavam ao mesmo tempo. Havia neles uma energia misteriosa, uma vontade indomável.\n\n---\n\n## O Plano de Capitu\n> \"Vamos falar com José Dias. Ele é quem tem influência sobre sua mãe. Se conseguirmos convencê-lo de que você não tem vocação para padre, ele mesmo dirá isso a ela.\"\n\nCapitu já estava traçando um plano de mestre, manipulando o próprio homem que nos denunciara. Naquele momento, compreendi que meu destino estava para sempre ligado àquela menina de olhar enigmático."
+      ],
+      "createdAt": "2026-07-03T10:05:00.881Z",
+      "premium": false,
+      "pages": 6,
+      "aiAnalysis": {
+        "featuredSuggestions": {
+          "trendingPotential": true,
+          "campaignIdea": "Especial do Mês: Machado de Assis",
+          "recommendationReason": "Relevância cultural expressiva no catálogo do BookVerse.",
+          "homepageSuitability": "Alta"
+        },
+        "suggestedCategories": [
+          "Clássico",
+          "Ficção"
+        ],
+        "autoTags": {
+          "emotions": [
+            "Inquietude",
+            "Empatia",
+            "Melancolia"
+          ],
+          "themes": [
+            "Reflexão Humana",
+            "Sociedade",
+            "Cultura",
+            "Clássico"
+          ],
+          "complexity": "Média",
+          "targetAudience": "Adulto / Geral"
+        },
+        "suggestedMetadata": {
+          "detectedLanguage": "Português",
+          "alternativeTitle": "Edição Premium: Dom Casmurro",
+          "estimatedYear": "1899",
+          "description": "Esta primorosa edição de \"Dom Casmurro\", escrita por Machado de Assis, foi revisada eletronicamente para oferecer a melhor experiência digital aos assinantes do BookVerse.\n\nA obra permanece como um testemunho fundamental de seu gênero, cativando leitores com sua rica prosa.",
+          "shortSummary": "Análise profunda e rica sob a ótica inigualável do autor Machado de Assis.",
+          "keywords": [
+            "clássico",
+            "machado",
+            "clássico",
+            "leitura recomendada"
+          ],
+          "fullSummary": "\"Dom Casmurro\" explora os dilemas morais de seus protagonistas em um cenário finamente desenhado por Machado de Assis. Através de capítulos bem cadenciados, o autor desenvolve reflexões profundas que convidam o leitor a desvendar os mistérios da trama."
+        },
+        "qualityMetrics": {
+          "inappropriateContent": false,
+          "status": "OK",
+          "details": "Análise eletrônica de catálogo concluída. Integridade estrutural do arquivo verificada com sucesso.",
+          "corruptedText": false,
+          "lowPdfQuality": false,
+          "unreadableFile": false,
+          "duplicatedPages": false,
+          "inconsistentFormatting": false
+        },
+        "potentialPopularity": {
+          "interestTrend": "Estável (Clássico)",
+          "relevanceIndex": 86,
+          "retentionProbability": "Média",
+          "readingPotential": "Alto"
+        },
+        "processedAt": "2026-07-03T19:55:06.643Z"
+      },
+      "isbn": "978-85-300-400",
+      "publishDate": "1899",
+      "status": "Active",
+      "isFeatured": true,
+      "readsCount": 120,
+      "updatedAt": "2026-07-03T10:05:00.881Z",
+      "categoryIds": [
+        "classico"
+      ],
+      "language": "Português",
+      "coverUrl": "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=600&auto=format&fit=crop",
+      "ratingsCount": 1,
+      "accessType": "free",
+      "title": "Dom Casmurro",
+      "publishedAt": "1899",
+      "listenersCount": 52,
+      "keywords": [
+        "clássico",
+        "machado"
+      ],
+      "id": "dom-casmurro",
+      "summary": [
+        {
+          "title": "Capítulo I - Do título",
+          "page": 1
+        },
+        {
+          "page": 2,
+          "title": "Capítulo II - Do livro"
+        },
+        {
+          "page": 3,
+          "title": "Capítulo III - A denúncia"
+        },
+        {
+          "title": "Capítulo IV - A promessa de Dona Glória",
+          "page": 4
+        },
+        {
+          "page": 5,
+          "title": "Capítulo V - O muro e o quintal"
+        },
+        {
+          "title": "Capítulo VI - Os olhos de ressaca",
+          "page": 6
+        }
+      ],
+      "category": "Psicologia",
+      "audioDuration": "1h 15m",
+      "authorId": "machado-de-assis",
+      "estimatedReadTime": "45m",
+      "description": "Uma das maiores obras da literatura brasileira. Bento Santiago, o Dom Casmurro, narra em primeira pessoa suas memórias, sua infância na Rua de Matacavalos, seu amor por Capitu e a atormentadora dúvida sobre a fidelidade de sua amada com seu melhor amigo, Escobar.",
+      "audioChapters": [
+        {
+          "durationSeconds": 150,
+          "startPage": 0,
+          "title": "Capítulo I - Do título"
+        },
+        {
+          "startPage": 1,
+          "title": "Capítulo II - Do livro",
+          "durationSeconds": 180
+        },
+        {
+          "durationSeconds": 220,
+          "title": "Capítulo III - A denúncia",
+          "startPage": 2
+        },
+        {
+          "durationSeconds": 200,
+          "startPage": 3,
+          "title": "Capítulo IV - A promessa"
+        },
+        {
+          "durationSeconds": 190,
+          "title": "Capítulo V - O muro",
+          "startPage": 4
+        },
+        {
+          "durationSeconds": 210,
+          "title": "Capítulo VI - Os olhos de ressaca",
+          "startPage": 5
+        }
+      ],
+      "avgRating": 5,
+      "history": [
+        {
+          "adminId": "demo-user",
+          "action": "Criação de Livro",
+          "adminName": "Tuto José",
+          "id": "hist-seed-0",
+          "reason": "Importação inicial do sistema.",
+          "timestamp": "2026-07-03T10:05:00.881Z"
+        }
+      ],
+      "copyright": {
+        "status": "licensed",
+        "licenseType": "standard_platform"
+      }
+    },
+    {
+      "authorId": "machado-de-assis",
+      "estimatedReadTime": "35m",
+      "summary": [
+        {
+          "page": 1,
+          "title": "Capítulo I - De como Itaguaí ganhou uma casa de orates"
+        },
+        {
+          "title": "Capítulo II - A fundação da Casa Verde",
+          "page": 2
+        },
+        {
+          "title": "Capítulo III - A teoria da loucura amplia-se",
+          "page": 3
+        },
+        {
+          "page": 4,
+          "title": "Capítulo IV - A rebelião dos Canjicas"
+        }
+      ],
+      "category": "Psicologia",
+      "description": "O renomado médico Dr. Simão Bacamarte estabelece a 'Casa Verde', o primeiro hospício da vila de Itaguaí, dedicando-se ao estudo científico da loucura. No entanto, sua busca obsessiva por uma definição universal de sanidade o leva a internar quase toda a população da cidade.",
+      "history": [
+        {
+          "id": "hist-seed-3",
+          "reason": "Importação inicial do sistema.",
+          "timestamp": "2026-06-27T10:05:00.881Z",
+          "adminId": "demo-user",
+          "action": "Criação de Livro",
+          "adminName": "Tuto José"
+        }
+      ],
+      "avgRating": 4.3,
+      "coverUrl": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=600&auto=format&fit=crop",
+      "categoryIds": [
+        "satira"
+      ],
+      "updatedAt": "2026-06-27T10:05:00.881Z",
+      "readsCount": 45,
+      "language": "Português",
+      "listenersCount": 0,
+      "id": "o-alienista",
+      "keywords": [
+        "sátira",
+        "machado"
+      ],
+      "title": "O Alienista",
+      "ratingsCount": 9,
+      "accessType": "premium",
+      "publishedAt": "1882",
+      "aiAnalysis": {
+        "autoTags": {
+          "themes": [
+            "Reflexão Humana",
+            "Sociedade",
+            "Cultura",
+            "Clássico"
+          ],
+          "complexity": "Média",
+          "targetAudience": "Adulto / Geral",
+          "emotions": [
+            "Inquietude",
+            "Empatia",
+            "Melancolia"
+          ]
+        },
+        "featuredSuggestions": {
+          "trendingPotential": true,
+          "homepageSuitability": "Alta",
+          "recommendationReason": "Relevância cultural expressiva no catálogo do BookVerse.",
+          "campaignIdea": "Especial do Mês: Machado de Assis"
+        },
+        "suggestedCategories": [
+          "Sátira",
+          "Ficção"
+        ],
+        "qualityMetrics": {
+          "duplicatedPages": false,
+          "inconsistentFormatting": false,
+          "unreadableFile": false,
+          "corruptedText": false,
+          "details": "Análise eletrônica de catálogo concluída. Integridade estrutural do arquivo verificada com sucesso.",
+          "lowPdfQuality": false,
+          "inappropriateContent": false,
+          "status": "OK"
+        },
+        "suggestedMetadata": {
+          "shortSummary": "Análise profunda e rica sob a ótica inigualável do autor Machado de Assis.",
+          "description": "Esta primorosa edição de \"O Alienista\", escrita por Machado de Assis, foi revisada eletronicamente para oferecer a melhor experiência digital aos assinantes do BookVerse.\n\nA obra permanece como um testemunho fundamental de seu gênero, cativando leitores com sua rica prosa.",
+          "estimatedYear": "1882",
+          "alternativeTitle": "Edição Premium: O Alienista",
+          "detectedLanguage": "Português",
+          "fullSummary": "\"O Alienista\" explora os dilemas morais de seus protagonistas em um cenário finamente desenhado por Machado de Assis. Através de capítulos bem cadenciados, o autor desenvolve reflexões profundas que convidam o leitor a desvendar os mistérios da trama.",
+          "keywords": [
+            "sátira",
+            "machado",
+            "clássico",
+            "leitura recomendada"
+          ]
+        },
+        "processedAt": "2026-07-03T19:55:06.643Z",
+        "potentialPopularity": {
+          "readingPotential": "Alto",
+          "retentionProbability": "Média",
+          "interestTrend": "Estável (Clássico)",
+          "relevanceIndex": 92
+        }
+      },
+      "isFeatured": false,
+      "isbn": "978-85-303-403",
+      "publishDate": "1882",
+      "status": "Active",
+      "createdAt": "2026-06-27T10:05:00.881Z",
+      "pdfContent": [
+        "# Capítulo I - De como Itaguaí ganhou uma casa de orates\n\nAs crônicas da vila de Itaguaí dizem que em tempos remotos vivera ali um médico, o **Dr. Simão Bacamarte**, filho da nobreza local e o maior médico do Brasil e de Portugal. Tendo estudado em Coimbra e Pádua, resolveu estabelecer-se em sua terra natal, recusando convites para cargos na corte de Lisboa.\n\n---\n\n## O Casamento Científico\nAos quarenta anos casou-se com *D. Evarista da Costa e Mascarenhas*, viúva de trinta e quatro:\n- Não por beleza nem graça.\n- Mas porque reuniu **excelentes condições fisiológicas** para dar-lhe filhos robustos e inteligentes.\n\nInfelizmente, os filhos não vieram, e Simão Bacamarte entregou-se de corpo e alma à ciência da mente.",
+        "# Capítulo II - A fundação da Casa Verde\n\nSimão Bacamarte percebeu que a loucura, que antes era tratada com desprezo ou trancada em porões familiares, merecia um estudo rigoroso e isolado. Propôs à Câmara de Itaguaí a criação de um asilo de loucos, que chamou de **Casa Verde**, devido à cor das janelas.\n\n---\n\n## O Financiamento e a Construção\nA Câmara aprovou o projeto com entusiasmo, cobrando um imposto sobre o uso de *penachos de cavalos em enterros* para financiar a construção.\n\n### Sobre a Casa Verde:\n- Pronta em poucos meses.\n- Galerias imensas e pátios de recreação.\n- Forte esquema de segurança.\n\n> De toda a região começaram a chegar os primeiros orates, e o alienista iniciou suas profundas classificações científicas.",
+        "# Capítulo III - A teoria da loucura amplia-se\n\nAté então, a loucura era considerada uma ilha no oceano da razão. Simão Bacamarte, no entanto, começou a suspeitar de que:\n\n> \"A razão é que era uma pequena island cercada por um imenso oceano de loucura.\"\n\nEle postulou que a demência não era a exceção, mas a regra.\n\n---\n\n## Uma Ótica Implacável\nCom essa nova hipótese na cabeça, o médico passou a examinar os cidadãos comuns da vila sob uma ótica implacável. Qualquer desvio de conduta, vaidade excessiva, superstição ou generosidade fora do comum era interpretada como sintoma de desequilíbrio mental.\n\n*O farmacêutico Crispim Soares foi o primeiro a tremer, mas logo as internações atingiram figuras ilustres.*",
+        "# Capítulo IV - A rebelião dos Canjicas\n\nA vila de Itaguaí, aterrorizada com as constantes internações efetuadas pelo Dr. Bacamarte, começou a se revoltar. Um barbeiro chamado **Porfírio**, apelidado de *'Canjica'*, liderou uma revolta popular contra o alienista, exigindo o fechamento da Casa Verde.\n\n---\n\n## O Confronto\nOs revoltosos marcharam pelas ruas gritando contra a ditadura médica, mas Simão Bacamarte os recebeu com tamanha calma e argumentos científicos que a multidão acabou dispersando.\n\n### O Desfecho Irônico\n1. O próprio Porfírio assumiu o poder temporário na vila.\n2. Foi seduzido pela autoridade do cientista.\n3. Acabou apoiando novas internações, selando o destino irônico de Itaguaí."
+      ],
+      "audiobookAvailable": false,
+      "favoritesCount": 24,
+      "author": "Machado de Assis",
+      "premium": true,
+      "pages": 4,
+      "copyright": {
+        "status": "commercial",
+        "licenseType": "purchase_required"
+      }
+    },
+    {
+      "readsCount": 95,
+      "updatedAt": "2026-07-01T10:05:00.881Z",
+      "categoryIds": [
+        "fantasia"
+      ],
+      "language": "Português",
+      "coverUrl": "https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=600&auto=format&fit=crop",
+      "ratingsCount": 13,
+      "accessType": "premium",
+      "title": "O Pequeno Príncipe",
+      "publishedAt": "1943",
+      "listenersCount": 40,
+      "keywords": [
+        "fantasia",
+        "antoine"
+      ],
+      "id": "pequeno-principe",
+      "summary": [
+        {
+          "page": 1,
+          "title": "Capítulo I - O desenho da jiboia"
+        },
+        {
+          "page": 2,
+          "title": "Capítulo II - O encontro no Saara"
+        },
+        {
+          "page": 3,
+          "title": "Capítulo III - O carneiro na caixa"
+        },
+        {
+          "title": "Capítulo IV - O Asteroide B-612",
+          "page": 4
+        },
+        {
+          "page": 5,
+          "title": "Capítulo V - Os baobás"
+        }
+      ],
+      "category": "Filosofia",
+      "authorId": "antoine-de-saint-exupery",
+      "audioDuration": "45m",
+      "estimatedReadTime": "30m",
+      "audioChapters": [
+        {
+          "title": "Capítulo I - O desenho da jiboia",
+          "startPage": 0,
+          "durationSeconds": 120
+        },
+        {
+          "durationSeconds": 160,
+          "startPage": 1,
+          "title": "Capítulo II - O encontro no Saara"
+        },
+        {
+          "title": "Capítulo III - O carneiro na caixa",
+          "startPage": 2,
+          "durationSeconds": 150
+        },
+        {
+          "durationSeconds": 140,
+          "startPage": 3,
+          "title": "Capítulo IV - O Asteroide B-612"
+        },
+        {
+          "title": "Capítulo V - Os baobás",
+          "startPage": 4,
+          "durationSeconds": 170
+        }
+      ],
+      "description": "Um piloto cujo avião cai no deserto do Saara encontra um jovem príncipe que viajou de asteroide em asteroide. Uma fábula poética e filosófica sobre a solidão, a amizade, o amor e a perda, contada através do olhar puro de uma criança.",
+      "history": [
+        {
+          "timestamp": "2026-07-01T10:05:00.881Z",
+          "id": "hist-seed-1",
+          "reason": "Importação inicial do sistema.",
+          "adminName": "Tuto José",
+          "action": "Criação de Livro",
+          "adminId": "demo-user"
+        }
+      ],
+      "avgRating": 4.6,
+      "favoritesCount": 38,
+      "audiobookAvailable": true,
+      "author": "Antoine de Saint-Exupéry",
+      "pdfContent": [
+        "# Capítulo I - O desenho da jiboia\n\nCerta vez, quando eu tinha seis anos, vi uma imagem magnífica num livro sobre a Floresta Virgem, que se chamava *Histórias Vividas*. Representava uma jiboia engolindo uma fera. O livro dizia:\n\n> \"As jiboias engolem a sua presa inteirinha, sem mastigar. Depois não podem mover-se e dormem durante os seis meses da digestão.\"\n\n---\n\n## Minha Primeira Obra-Prima\nRefleti muito sobre as aventuras da selva e, por minha vez, consegui desenhar, com um lápis de cor, o meu primeiro desenho. Mostrei a minha obra-prima às pessoas grandes e perguntei se o meu desenho lhes dava medo.\n\nElas responderam: *\"Por que um chapéu daria medo?\"*\n\n### O que o desenho realmente representava?\n1. Meu desenho **não** representava um chapéu.\n2. Representava uma **jiboia digerindo um elefante**.\n3. Desenhei então o interior da jiboia, para que as pessoas grandes pudessem compreender. Elas sempre necessitam de explicações.",
+        "# Capítulo II - O encontro no Saara\n\nVivi assim, só, sem ninguém com quem pudesse falar de verdade, até que tive uma pane no deserto do Saara, há seis anos. Algo se quebrara no motor do meu avião. E como não tinha comigo mecânico nem passageiros, preparei-me para realizar, sozinho, um difícil conserto.\n\n---\n\n## Uma Questão de Vida ou Morte\n- Era, para mim, questão de vida ou morte.\n- Água de beber, eu só tinha para **oito dias**.\n\nNa primeira noite, adormeci sobre a areia, a mil milhas de qualquer terra habitada. Estava mais isolado que um náufrago numa jangada no meio do oceano.\n\n> Imaginem, pois, a minha surpresa, quando, ao amanhecer, uma vozinha estranha me acordou. Dizia: **\"Por favor... desenha-me um carneiro!\"**",
+        "# Capítulo III - O carneiro na caixa\n\nColoquei-me de pé, como se tivesse sido atingido por um raio. Esfreguei bem os olhos. Olhei ao meu redor. E vi um homenzinho extraordinário que me examinava com toda a seriedade. Olhei para aquela aparição com olhos cheios de espanto. Não se esqueçam de que eu me encontrava a mil milhas de qualquer região habitada.\n\n---\n\n## O Pedido Incomum\nComo eu não sabia desenhar um carneiro, fiz para ele o meu desenho da jiboia fechada. E fiquei estupefato ao ouvir o garoto responder:\n\n> \"Não! No! Eu não quero um elefante numa jiboia. A jiboia é muito perigosa, e o elefante ocupa muito espaço. Onde eu vivo tudo é muito pequeno. Eu preciso é de um carneiro. Desenha-me um carneiro!\"\n\n### A Solução Criativa\nDesenhei vários carneiros, mas ele recusou todos. Já impaciente, desenhei uma caixa e disse:\n*\"Esta é a caixa. O carneiro que você quer está aí dentro.\"*\n\nE fiquei surpreso ao ver o rosto do meu jovem juiz iluminar-se:\n> ***\"Era exatamente assim que eu queria!\"***",
+        "# Capítulo IV - O Asteroide B-612\n\nLevei muito tempo para compreender de onde ele vinha. O principezinho, que me fazia centenas de perguntas, nunca parecia ouvir as minhas. Foram palavras pronunciadas ao acaso que, pouco a pouco, revelaram tudo.\n\n---\n\n## A Origem do Príncipe\nAssim, quando viu meu avião pela primeira vez, perguntou-me de que planeta eu vinha. Compreendi então que o seu próprio planeta devia ser minúsculo.\n\n### Sobre o Asteroide B-612:\n- Tenho sérias razões para acreditar que o planeta de onde vinha o principezinho era o **Asteroide B-612**.\n- Esse asteroide só foi visto uma vez ao telescópio, em 1909, por um astrônomo turco.\n- O astrônomo fez na época uma grande demonstração de sua descoberta num *Congresso Internacional de Astronomia*. Mas ninguém acreditara nele por causa de suas roupas turcas.\n> \"As pessoas grandes são assim.\"",
+        "# Capítulo V - Os baobás\n\nA cada dia eu aprendia algo mais sobre o seu planeta, sobre a sua partida, sobre a sua viagem. Foi assim que conheci, no terceiro dia, o drama dos baobás.\n\n---\n\n## O Perigo das Sementes de Baobá\nNo planeta do principezinho, como em todos os planetas, havia ervas boas e ervas más. Consequentemente, sementes boas de ervas boas e sementes rés de ervas rés.\n\n> \"As sementes são invisíveis. Elas dormem no segredo da terra até que uma delas decida despertar. Se for uma planta ruim, é preciso arrancá-la imediatamente, logo que se possa distingui-la.\"\n\n### Por que os baobás são uma ameaça?\n- O solo do planeta estava infestado delas.\n- Se não arrancarmos um baobá a tempo, ele cresce, ocupa todo o espaço.\n- Suas raízes podem **perfurar o planeta inteiro**.\n\n*\"É uma questão de disciplina\"*, dizia-me mais tarde o principezinho."
+      ],
+      "createdAt": "2026-07-01T10:05:00.881Z",
+      "premium": true,
+      "pages": 5,
+      "aiAnalysis": {
+        "autoTags": {
+          "complexity": "Média",
+          "themes": [
+            "Reflexão Humana",
+            "Sociedade",
+            "Cultura",
+            "Clássico"
+          ],
+          "targetAudience": "Adulto / Geral",
+          "emotions": [
+            "Inquietude",
+            "Empatia",
+            "Melancolia"
+          ]
+        },
+        "featuredSuggestions": {
+          "homepageSuitability": "Alta",
+          "recommendationReason": "Relevância cultural expressiva no catálogo do BookVerse.",
+          "campaignIdea": "Especial do Mês: Antoine de Saint-Exupéry",
+          "trendingPotential": true
+        },
+        "suggestedCategories": [
+          "Fantasia",
+          "Ficção"
+        ],
+        "qualityMetrics": {
+          "unreadableFile": false,
+          "duplicatedPages": false,
+          "inconsistentFormatting": false,
+          "inappropriateContent": false,
+          "status": "OK",
+          "corruptedText": false,
+          "details": "Análise eletrônica de catálogo concluída. Integridade estrutural do arquivo verificada com sucesso.",
+          "lowPdfQuality": false
+        },
+        "suggestedMetadata": {
+          "fullSummary": "\"O Pequeno Príncipe\" explora os dilemas morais de seus protagonistas em um cenário finamente desenhado por Antoine de Saint-Exupéry. Através de capítulos bem cadenciados, o autor desenvolve reflexões profundas que convidam o leitor a desvendar os mistérios da trama.",
+          "keywords": [
+            "fantasia",
+            "antoine",
+            "clássico",
+            "leitura recomendada"
+          ],
+          "description": "Esta primorosa edição de \"O Pequeno Príncipe\", escrita por Antoine de Saint-Exupéry, foi revisada eletronicamente para oferecer a melhor experiência digital aos assinantes do BookVerse.\n\nA obra permanece como um testemunho fundamental de seu gênero, cativando leitores com sua rica prosa.",
+          "shortSummary": "Análise profunda e rica sob a ótica inigualável do autor Antoine de Saint-Exupéry.",
+          "estimatedYear": "1943",
+          "alternativeTitle": "Edição Premium: O Pequeno Príncipe",
+          "detectedLanguage": "Português"
+        },
+        "processedAt": "2026-07-03T19:55:06.643Z",
+        "potentialPopularity": {
+          "readingPotential": "Alto",
+          "interestTrend": "Estável (Clássico)",
+          "relevanceIndex": 84,
+          "retentionProbability": "Média"
+        }
+      },
+      "publishDate": "1943",
+      "isbn": "978-85-301-401",
+      "status": "Pending Review",
+      "isFeatured": false,
+      "copyright": {
+        "status": "exclusive",
+        "licenseType": "purchase_required"
+      }
+    }
+  ],
+  "progress": [
+    {
+      "userId": "demo-user",
+      "bookId": "book-whtepgmsz",
+      "audioPositionSeconds": 0,
+      "lastPage": 1,
+      "progressPercentage": 100,
+      "lastReadAt": "2026-07-04T01:36:08.859Z"
+    },
+    {
+      "progressPercentage": 17,
+      "lastPage": 0,
+      "lastReadAt": "2026-07-03T19:42:13.254Z",
+      "audioPositionSeconds": 0,
+      "bookId": "dom-casmurro",
+      "userId": "demo-user"
+    },
+    {
+      "progressPercentage": 17,
+      "lastPage": 0,
+      "lastReadAt": "2026-07-04T18:50:01.959Z",
+      "userId": "user-0n4jmtkf9",
+      "audioPositionSeconds": 0,
+      "bookId": "dom-casmurro"
+    }
+  ],
+  "bookmarks": [],
+  "notes": [],
+  "reviews": [
+    {
+      "status": "active",
+      "bookTitle": "Dom Casmurro",
+      "bookId": "dom-casmurro",
+      "reports": [],
+      "replies": [],
+      "rating": 5,
+      "id": "rev1",
+      "likes": [],
+      "userName": "Tuto José",
+      "userId": "demo-user",
+      "comment": "tesr",
+      "createdAt": "2026-07-03T15:34:47.991Z"
+    }
+  ],
+  "stats": [
+    {
+      "activeReports": 1,
+      "totalBooks": 5,
+      "totalReviews": 1,
+      "totalUsers": 2,
+      "updatedAt": "2026-07-05T21:32:53.034Z"
+    },
+    {
+      "booksInProgressCount": 1,
+      "listeningMinutes": 45,
+      "pagesReadCount": 40,
+      "booksCompletedCount": 3,
+      "avgSessionMinutes": 31,
+      "userId": "demo-user",
+      "readingMinutes": 122.1
+    },
+    {
+      "avgSessionMinutes": 3,
+      "userId": "user-0n4jmtkf9",
+      "booksCompletedCount": 0,
+      "readingMinutes": 2.8,
+      "booksInProgressCount": 1,
+      "pagesReadCount": 4,
+      "listeningMinutes": 0
+    }
+  ],
+  "reports": [
+    {
+      "userId": "demo-user",
+      "date": "2026-06-30T15:05:00.880Z",
+      "reason": "Conteúdo inadequado",
+      "id": "rep-1",
+      "userName": "Tuto José",
+      "bookId": "memorias-postumas",
+      "status": "Pending",
+      "bookTitle": "Memórias Póstumas de Brás Cubas",
+      "description": "Contém termos arcaicos que geram debate conceitual."
+    }
+  ],
+  "logs": [
+    {
+      "userEmail": "tutojose1@gmail.com",
+      "userName": "Tuto José",
+      "id": "log-1",
+      "timestamp": "2026-07-03T15:05:00.880Z",
+      "details": "Super Administrador Tuto José realizou login no painel.",
+      "action": "Logins administrativos",
+      "userId": "demo-user"
+    },
+    {
+      "userId": "demo-user",
+      "action": "Alteração de Status",
+      "details": "Status do livro \"48 leis do Poder\" alterado de \"Draft\" para \"Active\". Motivo: Nenhum.",
+      "timestamp": "2026-07-04T01:35:49.724Z",
+      "id": "log-7jje59hcj",
+      "userName": "Tuto José",
+      "userEmail": "tutojose1@gmail.com"
+    },
+    {
+      "userId": "demo-user",
+      "action": "Análise de Catálogo em Lote",
+      "details": "Executou análise automática de IA para 5 livros sem análises prévias no acervo.",
+      "id": "log-9x7n40xyw",
+      "timestamp": "2026-07-03T19:55:06.643Z",
+      "userEmail": "tutojose1@gmail.com",
+      "userName": "Tuto José"
+    },
+    {
+      "userId": "demo-user",
+      "details": "Rejeitou a solicitação de plano Premium do usuário Ana Madalena (desouzaanamadalena@gmail.com).",
+      "action": "Rejeitar Assinatura",
+      "timestamp": "2026-07-03T21:05:53.249Z",
+      "id": "log-myqp12sr1",
+      "userName": "Tuto José",
+      "userEmail": "tutojose1@gmail.com"
+    },
+    {
+      "timestamp": "2026-07-03T19:40:04.304Z",
+      "id": "log-pkx72edzw",
+      "userName": "Tuto José",
+      "userEmail": "tutojose1@gmail.com",
+      "userId": "demo-user",
+      "details": "Status do livro \"48 leis do Poder\" alterado de \"Draft\" para \"Active\". Motivo: Nenhum.",
+      "action": "Alteração de Status"
+    },
+    {
+      "userEmail": "tutojose1@gmail.com",
+      "userName": "Tuto José",
+      "id": "log-qn0otklg3",
+      "timestamp": "2026-07-03T21:17:24.244Z",
+      "action": "Aprovar Assinatura",
+      "details": "Aprovou a solicitação de plano Premium do usuário Ana Madalena (desouzaanamadalena@gmail.com).",
+      "userId": "demo-user"
+    },
+    {
+      "userId": "demo-user",
+      "action": "Rejeitar Assinatura",
+      "details": "Rejeitou a solicitação de plano Premium do usuário Ana Madalena (desouzaanamadalena@gmail.com).",
+      "timestamp": "2026-07-03T19:53:30.126Z",
+      "id": "log-v7j6hzs62",
+      "userName": "Tuto José",
+      "userEmail": "tutojose1@gmail.com"
+    },
+    {
+      "userName": "Tuto José",
+      "userEmail": "tutojose1@gmail.com",
+      "timestamp": "2026-07-03T21:15:29.121Z",
+      "id": "log-vo28b3kio",
+      "action": "Rejeitar Assinatura",
+      "details": "Rejeitou a solicitação de plano Premium do usuário Ana Madalena (desouzaanamadalena@gmail.com).",
+      "userId": "demo-user"
+    },
+    {
+      "userEmail": "tutojose1@gmail.com",
+      "userName": "Tuto José",
+      "id": "log-x1ekgk969",
+      "timestamp": "2026-07-04T01:16:35.380Z",
+      "action": "Alteração de Status",
+      "details": "Status do livro \"48 leis do Poder\" alterado de \"Active\" para \"Draft\". Motivo: Nenhum.",
+      "userId": "demo-user"
+    },
+    {
+      "userId": "demo-user",
+      "action": "Alteração de Status",
+      "details": "Status do livro \"48 leis do Poder\" alterado de \"Active\" para \"Draft\". Motivo: Aprovado no controle de qualidade.",
+      "id": "log-x97be6qnu",
+      "timestamp": "2026-07-03T19:28:04.143Z",
+      "userEmail": "tutojose1@gmail.com",
+      "userName": "Tuto José"
+    }
+  ],
+  "notifications": [
+    {
+      "title": "Novo dispositivo conectado",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 04/07/2026 às 00:48:40.",
+      "id": "notif-3s1uu78ts",
+      "icon": "shield",
+      "category": "new_device_login",
+      "destinationLink": "settings",
+      "read": false,
+      "userId": "demo-user",
+      "origin": "system",
+      "type": "account",
+      "priority": "high",
+      "createdAt": "2026-07-04T00:48:40.063Z"
+    },
+    {
+      "icon": "book",
+      "bookTitle": "48 leis do Poder",
+      "type": "books",
+      "priority": "medium",
+      "userId": "demo-user",
+      "destinationLink": "reader:book-whtepgmsz",
+      "category": "book_available",
+      "id": "notif-55b3xoyuv",
+      "message": "O livro que você estava lendo (\"48 leis do Poder\") voltou a ficar disponível. Continue sua leitura de onde parou.",
+      "bookId": "book-whtepgmsz",
+      "title": "Livro Disponível!",
+      "createdAt": "2026-07-04T01:35:49.724Z",
+      "read": false,
+      "origin": "automatic"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 04/07/2026 às 00:46:49.",
+      "id": "notif-70ds45bl2",
+      "icon": "shield",
+      "origin": "system",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "read": false,
+      "userId": "demo-user",
+      "priority": "high",
+      "createdAt": "2026-07-04T00:46:49.939Z",
+      "type": "account"
+    },
+    {
+      "read": false,
+      "userId": "demo-user",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "origin": "system",
+      "type": "account",
+      "createdAt": "2026-07-03T16:34:03.862Z",
+      "priority": "high",
+      "title": "Novo dispositivo conectado",
+      "id": "notif-c332m2red",
+      "icon": "shield",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 16:34:03."
+    },
+    {
+      "createdAt": "2026-07-03T15:28:41.978Z",
+      "priority": "high",
+      "type": "account",
+      "origin": "system",
+      "read": false,
+      "userId": "demo-user",
+      "category": "new_device_login",
+      "destinationLink": "settings",
+      "id": "notif-e3klf56te",
+      "icon": "shield",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 15:28:41.",
+      "title": "Novo dispositivo conectado"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "id": "notif-klkqsl7kr",
+      "icon": "shield",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:05:20.",
+      "read": false,
+      "userId": "demo-user",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "origin": "system",
+      "type": "account",
+      "createdAt": "2026-07-03T21:05:20.601Z",
+      "priority": "high"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "id": "notif-llv75ikcj",
+      "icon": "shield",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:17:10.",
+      "origin": "system",
+      "read": false,
+      "userId": "demo-user",
+      "category": "new_device_login",
+      "destinationLink": "settings",
+      "createdAt": "2026-07-03T21:17:10.785Z",
+      "priority": "high",
+      "type": "account"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:14:59.",
+      "id": "notif-m12hbby57",
+      "icon": "shield",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "read": false,
+      "userId": "demo-user",
+      "origin": "system",
+      "type": "account",
+      "priority": "high",
+      "createdAt": "2026-07-03T21:14:59.256Z"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:29:41.",
+      "id": "notif-pini3k3sc",
+      "icon": "shield",
+      "origin": "system",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "userId": "demo-user",
+      "read": false,
+      "priority": "high",
+      "createdAt": "2026-07-03T21:29:41.616Z",
+      "type": "account"
+    },
+    {
+      "read": false,
+      "origin": "automatic",
+      "createdAt": "2026-07-03T19:27:45.213Z",
+      "bookId": "book-whtepgmsz",
+      "title": "Novo Livro Publicado!",
+      "message": "O livro \"48 leis do Poder\" de Robert Greene já está disponível na plataforma. Comece a ler agora!",
+      "id": "notif-w6tn26z7g",
+      "category": "new_book",
+      "destinationLink": "reader:book-whtepgmsz",
+      "userId": "demo-user",
+      "type": "books",
+      "priority": "medium",
+      "bookTitle": "48 leis do Poder",
+      "icon": "book-open"
+    },
+    {
+      "userId": "demo-user",
+      "read": false,
+      "category": "new_device_login",
+      "destinationLink": "settings",
+      "origin": "system",
+      "type": "account",
+      "createdAt": "2026-07-03T21:33:12.293Z",
+      "priority": "high",
+      "title": "Novo dispositivo conectado",
+      "icon": "shield",
+      "id": "notif-zy75cqg2x",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:33:12."
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:17:58.",
+      "id": "notif-0k3psnp1t",
+      "icon": "shield",
+      "origin": "system",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "userId": "user-0n4jmtkf9",
+      "read": false,
+      "priority": "high",
+      "createdAt": "2026-07-03T21:17:58.560Z",
+      "type": "account"
+    },
+    {
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:16:25.",
+      "id": "notif-2u7wl3ll8",
+      "icon": "shield",
+      "title": "Novo dispositivo conectado",
+      "priority": "high",
+      "createdAt": "2026-07-03T21:16:25.998Z",
+      "type": "account",
+      "origin": "system",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "read": false,
+      "userId": "user-0n4jmtkf9"
+    },
+    {
+      "message": "Sua solicitação de ativação de plano Premium não pôde ser validada. Se realizou um Pix/transferência, verifique os dados e envie novamente ou entre em contato.",
+      "id": "notif-6cftdnfd3",
+      "icon": "alert-triangle",
+      "title": "❌ Solicitação Premium Não Aprovada",
+      "priority": "high",
+      "createdAt": "2026-07-03T21:15:29.122Z",
+      "type": "account",
+      "origin": "system",
+      "destinationLink": "profile",
+      "category": "premium_rejected",
+      "read": false,
+      "userId": "user-0n4jmtkf9"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:06:30.",
+      "id": "notif-9eo7klaa6",
+      "icon": "shield",
+      "origin": "system",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "priority": "high",
+      "createdAt": "2026-07-03T21:06:30.076Z",
+      "type": "account"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 04/07/2026 às 00:41:00.",
+      "id": "notif-hac2zwh60",
+      "icon": "shield",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "origin": "system",
+      "type": "account",
+      "priority": "high",
+      "createdAt": "2026-07-04T00:41:00.550Z"
+    },
+    {
+      "priority": "high",
+      "createdAt": "2026-07-03T21:05:53.250Z",
+      "type": "account",
+      "origin": "system",
+      "category": "premium_rejected",
+      "destinationLink": "profile",
+      "userId": "user-0n4jmtkf9",
+      "read": false,
+      "message": "Sua solicitação de ativação de plano Premium não pôde ser validada. Se realizou um Pix/transferência, verifique os dados e envie novamente ou entre em contato.",
+      "icon": "alert-triangle",
+      "id": "notif-hqeug3scs",
+      "title": "❌ Solicitação Premium Não Aprovada"
+    },
+    {
+      "id": "notif-j6bf8u4gm",
+      "icon": "shield",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 20:55:37.",
+      "title": "Novo dispositivo conectado",
+      "createdAt": "2026-07-03T20:55:37.657Z",
+      "priority": "high",
+      "type": "account",
+      "origin": "system",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "category": "new_device_login",
+      "destinationLink": "settings"
+    },
+    {
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:30:46.",
+      "id": "notif-na9abhguk",
+      "icon": "shield",
+      "title": "Novo dispositivo conectado",
+      "type": "account",
+      "priority": "high",
+      "createdAt": "2026-07-03T21:30:46.281Z",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "origin": "system"
+    },
+    {
+      "id": "notif-p6pnbvxz4",
+      "icon": "sparkles",
+      "message": "Olá, Ana Madalena! O administrador aprovou o seu comprovante/solicitação. Sua assinatura Premium está ATIVA! Aproveite os audiobooks e downloads.",
+      "title": "🚀 Sua Assinatura Premium foi Aprovada!",
+      "createdAt": "2026-07-03T21:17:24.246Z",
+      "priority": "high",
+      "type": "account",
+      "origin": "system",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "destinationLink": "profile",
+      "category": "premium_activated"
+    },
+    {
+      "title": "Bem-vindo ao BookVerse!",
+      "message": "Olá, Ana Madalena! Seu cadastro foi concluído com sucesso. Desejamos uma excelente leitura!",
+      "id": "notif-r6nxulzpf",
+      "icon": "user",
+      "destinationLink": "library",
+      "category": "welcome",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "origin": "system",
+      "type": "account",
+      "priority": "medium",
+      "createdAt": "2026-07-03T15:38:30.665Z"
+    },
+    {
+      "id": "notif-sndfhplvh",
+      "icon": "shield",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 04/07/2026 às 18:36:14.",
+      "title": "Novo dispositivo conectado",
+      "createdAt": "2026-07-04T18:36:14.375Z",
+      "priority": "high",
+      "type": "account",
+      "origin": "system",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "destinationLink": "settings",
+      "category": "new_device_login"
+    },
+    {
+      "createdAt": "2026-07-03T19:27:45.213Z",
+      "read": false,
+      "origin": "automatic",
+      "message": "O livro \"48 leis do Poder\" de Robert Greene já está disponível na plataforma. Comece a ler agora!",
+      "id": "notif-vdclz13hl",
+      "bookId": "book-whtepgmsz",
+      "title": "Novo Livro Publicado!",
+      "type": "books",
+      "priority": "medium",
+      "destinationLink": "reader:book-whtepgmsz",
+      "category": "new_book",
+      "userId": "user-0n4jmtkf9",
+      "icon": "book-open",
+      "bookTitle": "48 leis do Poder"
+    },
+    {
+      "title": "❌ Solicitação Premium Não Aprovada",
+      "message": "Sua solicitação de ativação de plano Premium não pôde ser validada. Se realizou um Pix/transferência, verifique os dados e envie novamente ou entre em contato.",
+      "id": "notif-zd5ge9lpk",
+      "icon": "alert-triangle",
+      "origin": "system",
+      "category": "premium_rejected",
+      "destinationLink": "profile",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "priority": "high",
+      "createdAt": "2026-07-03T19:53:30.128Z",
+      "type": "account"
+    },
+    {
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 03/07/2026 às 21:04:49.",
+      "id": "notif-zdcfq9htl",
+      "icon": "shield",
+      "title": "Novo dispositivo conectado",
+      "priority": "high",
+      "createdAt": "2026-07-03T21:04:49.059Z",
+      "type": "account",
+      "origin": "system",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "read": false,
+      "userId": "user-0n4jmtkf9"
+    },
+    {
+      "title": "Novo dispositivo conectado",
+      "id": "notif-zizqr4kdl",
+      "icon": "shield",
+      "message": "Um novo acesso foi detectado em sua conta BookVerse em 04/07/2026 às 00:48:02.",
+      "origin": "system",
+      "read": false,
+      "userId": "user-0n4jmtkf9",
+      "destinationLink": "settings",
+      "category": "new_device_login",
+      "createdAt": "2026-07-04T00:48:02.970Z",
+      "priority": "high",
+      "type": "account"
+    }
+  ],
+  "payments": [
+    {
+      "interval": "monthly",
+      "id": "pay-1",
+      "currency": "BRL",
+      "status": "succeeded",
+      "date": "2026-06-28T15:05:00.880Z",
+      "amount": 9.99,
+      "userId": "demo-user",
+      "receiptUrl": "#",
+      "planName": "Premium Mensal"
+    },
+    {
+      "interval": "monthly",
+      "id": "pay-v86vq7dgd",
+      "currency": "BRL",
+      "status": "succeeded",
+      "date": "2026-07-03T21:17:24.244Z",
+      "amount": 9.99,
+      "userId": "user-0n4jmtkf9",
+      "receiptUrl": "#",
+      "planName": "Premium Mensal (Aprovação Manual)"
+    }
+  ],
+  "premiumRequests": [
+    {
+      "userId": "user-0n4jmtkf9",
+      "plan": "PREMIUM",
+      "paymentDetails": "",
+      "createdAt": "2026-07-03T21:16:40.832Z",
+      "userEmail": "desouzaanamadalena@gmail.com",
+      "status": "approved",
+      "paymentMethod": "card",
+      "billingInterval": "monthly",
+      "id": "req-2raskz8l5",
+      "userName": "Ana Madalena"
+    },
+    {
+      "id": "req-aplac5f15",
+      "userName": "Ana Madalena",
+      "status": "rejected",
+      "paymentMethod": "card",
+      "billingInterval": "monthly",
+      "plan": "PREMIUM",
+      "paymentDetails": "",
+      "createdAt": "2026-07-03T15:39:30.032Z",
+      "userEmail": "desouzaanamadalena@gmail.com",
+      "userId": "user-0n4jmtkf9"
+    },
+    {
+      "userId": "user-0n4jmtkf9",
+      "paymentDetails": "",
+      "plan": "PREMIUM",
+      "createdAt": "2026-07-03T20:56:53.923Z",
+      "userEmail": "desouzaanamadalena@gmail.com",
+      "status": "rejected",
+      "billingInterval": "monthly",
+      "paymentMethod": "card",
+      "id": "req-hlphxt9zk",
+      "userName": "Ana Madalena"
+    },
+    {
+      "userName": "Ana Madalena",
+      "id": "req-ry3v91qha",
+      "billingInterval": "monthly",
+      "paymentMethod": "card",
+      "status": "rejected",
+      "userEmail": "desouzaanamadalena@gmail.com",
+      "createdAt": "2026-07-03T21:06:40.844Z",
+      "paymentDetails": "",
+      "plan": "PREMIUM",
+      "userId": "user-0n4jmtkf9"
+    }
+  ],
+  "subscriptionPrices": {
+    "monthly": 9.99,
+    "yearly": 89.99
+  },
+  "aiEnabled": true
+}

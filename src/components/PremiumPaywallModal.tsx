@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Sparkles, Check, X, Shield, Lock, CreditCard, ChevronRight, HelpCircle, AlertCircle, Headphones, Download, BarChart2, Smartphone, DollarSign, Wallet } from "lucide-react";
+import { Sparkles, Check, X, Shield, Lock, CreditCard, ChevronRight, HelpCircle, AlertCircle, Headphones, Download, BarChart2, Smartphone, DollarSign, Wallet, PhoneCall, QrCode } from "lucide-react";
 import { User } from "../types";
 
 interface PremiumPaywallModalProps {
@@ -9,6 +9,7 @@ interface PremiumPaywallModalProps {
   userId: string;
   onSuccess: (updatedUser: User) => void;
   initialReason?: "audiobook" | "offline" | "premium_book" | "stats" | "highlights" | "generic";
+  initialInterval?: "monthly" | "yearly";
 }
 
 export default function PremiumPaywallModal({
@@ -16,18 +17,24 @@ export default function PremiumPaywallModal({
   onClose,
   userId,
   onSuccess,
-  initialReason = "generic"
+  initialReason = "generic",
+  initialInterval = "monthly"
 }: PremiumPaywallModalProps) {
   const [step, setStep] = useState<"paywall" | "checkout" | "success">("paywall");
-  const [selectedInterval, setSelectedInterval] = useState<"monthly" | "yearly">("monthly");
+  const [selectedInterval, setSelectedInterval] = useState<"monthly" | "yearly">(initialInterval);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  
+  // Simulated secure payment process states
+  const [paymentStatus, setPaymentStatus] = useState<"pending" | "processing" | "success">("pending");
+  const [paymentStepLog, setPaymentStepLog] = useState("");
   
   // Dynamic Pricing loaded from backend (Default to USD $)
   const [prices, setPrices] = useState<{ monthly: number; yearly: number }>({ monthly: 9.99, yearly: 89.99 });
 
-  // Suggested Payment Methods
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "paypal" | "gplay" | "crypto">("card");
+  // Suggested Payment Methods and Localization
+  const [country, setCountry] = useState<"MZ" | "BR" | "PT" | "OTHER">("MZ");
+  const [paymentMethod, setPaymentMethod] = useState<string>("gplay"); // Google Pay Recommended by default
 
   // Simulated Card Info
   const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
@@ -42,8 +49,19 @@ export default function PremiumPaywallModal({
   const [cryptoTx, setCryptoTx] = useState("");
   const cryptoWallet = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
 
+  // Simulated Regional Payments Info
+  const [mpesaPhone, setMpesaPhone] = useState("");
+  const [emolaPhone, setEmolaPhone] = useState("");
+  const [pixChave, setPixChave] = useState("");
+  const [binanceId, setBinanceId] = useState("");
+
   useEffect(() => {
     if (isOpen) {
+      setStep("paywall");
+      setPaymentStatus("pending");
+      setPaymentStepLog("");
+      setSelectedInterval(initialInterval);
+      
       // Fetch current admin-configured pricing from server
       fetch("/api/billing/prices")
         .then((res) => res.json())
@@ -99,6 +117,7 @@ export default function PremiumPaywallModal({
   const handleSubscribe = async () => {
     if (step === "paywall") {
       setStep("checkout");
+      setPaymentStatus("pending");
       return;
     }
 
@@ -118,25 +137,73 @@ export default function PremiumPaywallModal({
       return;
     }
 
+    if (paymentMethod === "mpesa" && !mpesaPhone.trim()) {
+      setErrorMsg("Por favor, informe seu número M-Pesa de 9 dígitos (Ex: 84XXXXXXX ou 85XXXXXXX).");
+      return;
+    }
+
+    if (paymentMethod === "emola" && !emolaPhone.trim()) {
+      setErrorMsg("Por favor, informe seu número e-Mola de 9 dígitos (Ex: 86XXXXXXX ou 87XXXXXXX).");
+      return;
+    }
+
+    if (paymentMethod === "pix" && !pixChave.trim()) {
+      setErrorMsg("Por favor, informe sua Chave Pix (CPF/CNPJ, E-mail, Celular ou Chave Aleatória) para faturamento.");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMsg("");
+    setPaymentStatus("processing");
 
     try {
+      // 1. Multi-Stage Simulated Secure Transaction sequence
+      setPaymentStepLog("Iniciando Gateway de Pagamento Seguro...");
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      const methodNames: Record<string, string> = {
+        gplay: "Google Pay",
+        mpesa: "M-Pesa Moçambique",
+        emola: "e-Mola Moçambique",
+        pix: "Pix Brasil",
+        card: "Cartão VISA/Mastercard",
+        paypal: "PayPal",
+        crypto: "Binance Pay / Crypto"
+      };
+
+      setPaymentStepLog(`Conectando ao canal de pagamento seguro de ${methodNames[paymentMethod] || "Checkout"}...`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const amountFormatted = selectedInterval === "yearly" ? `$ ${prices.yearly.toFixed(2)}` : `$ ${prices.monthly.toFixed(2)}`;
+      setPaymentStepLog(`Solicitando autorização de débito de ${amountFormatted}...`);
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      setPaymentStepLog("Transação Autorizada com Sucesso! Gerando comprovante eletrônico...");
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      setPaymentStatus("success");
+
       // Build dynamic payment description string
       let paymentDetails = "";
       if (paymentMethod === "card") {
         const last4 = cardNumber.replace(/\s/g, "").slice(-4) || "4242";
         const brand = cardNumber.startsWith("5") ? "Mastercard" : "Visa";
-        paymentDetails = `Cartão ${brand} final **** ${last4} (${cardName})`;
+        paymentDetails = `Cartão ${brand} final **** ${last4} (${cardName}) - Pago via Simulação`;
       } else if (paymentMethod === "paypal") {
-        paymentDetails = `PayPal: ${paypalEmail}`;
+        paymentDetails = `PayPal: ${paypalEmail} - Pago via Simulação`;
       } else if (paymentMethod === "gplay") {
-        paymentDetails = `Google / Apple Pay Autorizado via Token`;
+        paymentDetails = `Google Pay Autorizado via Carteira Digital (Recomendado) - Pago via Simulação`;
       } else if (paymentMethod === "crypto") {
-        paymentDetails = `USDC Cripto (Tx: ${cryptoTx.substring(0, 10)}...)`;
+        paymentDetails = `Binance Pay (Hash Tx: ${cryptoTx.substring(0, 10)}...) - Pago via Simulação`;
+      } else if (paymentMethod === "mpesa") {
+        paymentDetails = `M-Pesa: Moçambique (${mpesaPhone}) - Pago via Simulação`;
+      } else if (paymentMethod === "emola") {
+        paymentDetails = `e-Mola: Moçambique (${emolaPhone}) - Pago via Simulação`;
+      } else if (paymentMethod === "pix") {
+        paymentDetails = `Pix Brasil (Chave: ${pixChave}) - Pago via Simulação`;
       }
 
-      // Submit the solicitation to the administrator queue
+      // 2. Submit the upgraded solicitation to the administrator queue AFTER billing simulation
       const res = await fetch("/api/billing/request-upgrade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,13 +217,14 @@ export default function PremiumPaywallModal({
 
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error || "Erro ao processar solicitação");
+        throw new Error(errData.error || "Erro ao salvar a solicitação após pagamento.");
       }
 
       setStep("success");
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || "Erro de conexão ao processar sua solicitação.");
+      setErrorMsg(err.message || "Falha ao processar o pagamento ou enviar a solicitação. Tente novamente.");
+      setPaymentStatus("pending");
     } finally {
       setIsSubmitting(false);
     }
@@ -296,15 +364,124 @@ export default function PremiumPaywallModal({
               exit={{ opacity: 0, x: -10 }}
               className="p-6 md:p-8"
             >
-              <h3 className="font-serif font-bold text-xl text-white mb-1">Solicitar Assinatura Premium</h3>
-              <p className="text-xs text-zinc-400 mb-5">
-                Você escolheu o plano <strong className="text-white">{selectedInterval === "yearly" ? `Premium Anual ($ ${prices.yearly.toFixed(2)})` : `Premium Mensal ($ ${prices.monthly.toFixed(2)})`}</strong>.
-              </p>
+              {paymentStatus === "processing" ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-6">
+                  <div className="relative">
+                    <div className="w-16 h-16 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+                    <Lock className="w-6 h-6 text-[#e2b874] absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h4 className="text-base font-bold text-white font-serif">Processando Pagamento Seguro</h4>
+                    <p className="text-xs text-[#e2b874] font-mono tracking-wide">{paymentStepLog}</p>
+                    <p className="text-[11px] text-zinc-500 max-w-sm mx-auto">
+                      Por favor, mantenha o seu dispositivo por perto. Se escolheu M-Pesa/e-Mola ou Pix, verifique a notificação de pagamento instantâneo em seu telefone.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-zinc-900 px-3.5 py-1.5 rounded-full border border-zinc-800 text-[10px] text-zinc-400 mx-auto">
+                    <Shield className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                    <span>Conexão Segura Criptografada (SSL de 256 bits)</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h3 className="font-serif font-bold text-xl text-white mb-1">Efetuar Pagamento e Ativar Premium</h3>
+                  <p className="text-xs text-zinc-400 mb-5">
+                    Realize o pagamento seguro abaixo para enviar a solicitação de plano <strong className="text-white">{selectedInterval === "yearly" ? `Premium Anual ($ ${prices.yearly.toFixed(2)})` : `Premium Mensal ($ ${prices.monthly.toFixed(2)})`}</strong>.
+                  </p>
+
+              {/* Country / Billing Location Selector */}
+              <div className="mb-4">
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">País / Região para Faturamento</label>
+                <select
+                  value={country}
+                  onChange={(e) => {
+                    const nextCountry = e.target.value as any;
+                    setCountry(nextCountry);
+                    setPaymentMethod("gplay"); // Reset to recommended Google Pay
+                    setErrorMsg("");
+                  }}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:border-[#e2b874] outline-none transition"
+                >
+                  <option value="MZ">Moçambique (M-Pesa, e-Mola, VISA, Google Pay)</option>
+                  <option value="BR">Brasil (Pix, VISA, Google Pay)</option>
+                  <option value="PT">Portugal (VISA, PayPal, Google Pay, Crypto)</option>
+                  <option value="OTHER">Outro País / Global (Global Checkout)</option>
+                </select>
+              </div>
 
               {/* Suggested Payment Methods tabs selector */}
               <div className="mb-5">
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Selecione a Forma de Pagamento sugerida</label>
-                <div className="grid grid-cols-4 gap-2">
+                <label className="block text-[10px] font-bold text-[#e2b874] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#e2b874] animate-pulse" />
+                  <span>Selecione a Forma de Pagamento (Google Pay Recomendado)</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  
+                  {/* Google Pay - Recommended for everyone */}
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentMethod("gplay"); setErrorMsg(""); }}
+                    className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer relative ${
+                      paymentMethod === "gplay"
+                        ? "bg-amber-500/10 border-amber-500 text-amber-400"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
+                    }`}
+                  >
+                    <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white font-sans font-bold text-[6px] px-1 py-0.5 rounded uppercase tracking-widest scale-85">REC</span>
+                    <Smartphone className="w-4 h-4 text-[#e2b874]" />
+                    <span>Google Pay</span>
+                  </button>
+
+                  {/* Moçambique special mobile wallets */}
+                  {country === "MZ" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setPaymentMethod("mpesa"); setErrorMsg(""); }}
+                        className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+                          paymentMethod === "mpesa"
+                            ? "bg-red-500/10 border-red-500 text-red-400"
+                            : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
+                        }`}
+                      >
+                        <PhoneCall className="w-4 h-4" />
+                        <span>M-Pesa</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setPaymentMethod("emola"); setErrorMsg(""); }}
+                        className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+                          paymentMethod === "emola"
+                            ? "bg-orange-500/10 border-orange-500 text-orange-400"
+                            : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
+                        }`}
+                      >
+                        <Smartphone className="w-4 h-4" />
+                        <span>e-Mola</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Brasil Pix */}
+                  {country === "BR" && (
+                    <button
+                      type="button"
+                      onClick={() => { setPaymentMethod("pix"); setErrorMsg(""); }}
+                      className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+                        paymentMethod === "pix"
+                          ? "bg-teal-500/10 border-teal-500 text-teal-400"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
+                      }`}
+                    >
+                      <QrCode className="w-4 h-4" />
+                      <span>Pix</span>
+                    </button>
+                  )}
+
+                  {/* Standard cards */}
                   <button
                     type="button"
                     onClick={() => { setPaymentMethod("card"); setErrorMsg(""); }}
@@ -315,47 +492,41 @@ export default function PremiumPaywallModal({
                     }`}
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>Cartão</span>
+                    <span>Cartão VISA</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => { setPaymentMethod("paypal"); setErrorMsg(""); }}
-                    className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
-                      paymentMethod === "paypal"
-                        ? "bg-[#e2b874]/10 border-[#e2b874] text-[#e2b874]"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
-                    }`}
-                  >
-                    <DollarSign className="w-4 h-4" />
-                    <span>PayPal</span>
-                  </button>
+                  {/* PayPal for PT or Other */}
+                  {(country === "PT" || country === "OTHER") && (
+                    <button
+                      type="button"
+                      onClick={() => { setPaymentMethod("paypal"); setErrorMsg(""); }}
+                      className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+                        paymentMethod === "paypal"
+                          ? "bg-sky-500/10 border-sky-500 text-sky-400"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
+                      }`}
+                    >
+                      <DollarSign className="w-4 h-4" />
+                      <span>PayPal</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => { setPaymentMethod("gplay"); setErrorMsg(""); }}
-                    className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
-                      paymentMethod === "gplay"
-                        ? "bg-[#e2b874]/10 border-[#e2b874] text-[#e2b874]"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
-                    }`}
-                  >
-                    <Smartphone className="w-4 h-4" />
-                    <span>Google/Apple</span>
-                  </button>
+                  {/* Crypto for PT or Other */}
+                  {(country === "PT" || country === "OTHER") && (
+                    <button
+                      type="button"
+                      onClick={() => { setPaymentMethod("crypto"); setErrorMsg(""); }}
+                      className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+                        paymentMethod === "crypto"
+                          ? "bg-[#e2b874]/10 border-[#e2b874] text-[#e2b874]"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
+                      }`}
+                    >
+                      <Wallet className="w-4 h-4" />
+                      <span>Binance Pay</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => { setPaymentMethod("crypto"); setErrorMsg(""); }}
-                    className={`py-2 px-1 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
-                      paymentMethod === "crypto"
-                        ? "bg-[#e2b874]/10 border-[#e2b874] text-[#e2b874]"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-750"
-                    }`}
-                  >
-                    <Wallet className="w-4 h-4" />
-                    <span>Cripto</span>
-                  </button>
                 </div>
               </div>
 
@@ -471,7 +642,79 @@ export default function PremiumPaywallModal({
                       Ativação expressa de 1 clique. O BookVerse solicitará a aprovação de débito em sua carteira digital ativa no dispositivo na moeda padrão USD ($).
                     </p>
                     <div className="py-2 inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border border-emerald-500/20">
-                      Dispositivo Prontificado para Google/Apple Pay
+                      Dispositivo Prontificado para Google Pay (Recomendado)
+                    </div>
+                  </div>
+                )}
+
+                {paymentMethod === "mpesa" && (
+                  <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-2xl space-y-3 text-left">
+                    <div className="flex items-center gap-2 text-red-500 font-bold text-sm">
+                      <PhoneCall className="w-5 h-5" />
+                      <span>M-Pesa Moçambique</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Digite seu número de telefone M-Pesa. Você receberá um prompt de confirmação de PIN (USSD) no celular informado para debitar com segurança.
+                    </p>
+                    <div>
+                      <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">Número de Celular M-Pesa</label>
+                      <input
+                        type="tel"
+                        value={mpesaPhone}
+                        onChange={(e) => setMpesaPhone(e.target.value)}
+                        placeholder="Ex: 840000000 ou 850000000"
+                        className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-[#e2b874] outline-none transition font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {paymentMethod === "emola" && (
+                  <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-2xl space-y-3 text-left">
+                    <div className="flex items-center gap-2 text-orange-500 font-bold text-sm">
+                      <Smartphone className="w-5 h-5" />
+                      <span>e-Mola Moçambique</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Insira o número e-Mola cadastrado. Um pedido de pagamento será enviado à rede móvel correspondente para aprovação direta.
+                    </p>
+                    <div>
+                      <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">Número de Celular e-Mola</label>
+                      <input
+                        type="tel"
+                        value={emolaPhone}
+                        onChange={(e) => setEmolaPhone(e.target.value)}
+                        placeholder="Ex: 860000000 ou 870000000"
+                        className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-[#e2b874] outline-none transition font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {paymentMethod === "pix" && (
+                  <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-2xl space-y-4 text-left">
+                    <div className="flex items-center gap-2 text-teal-400 font-bold text-sm">
+                      <QrCode className="w-5 h-5" />
+                      <span>Pix Brasil (Instantâneo)</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Gere o código Copia e Cola ou escaneie o QR Code em seu aplicativo bancário para aprovação instantânea da sua assinatura no BookVerse.
+                    </p>
+                    <div className="bg-white p-3 rounded-2xl max-w-[140px] mx-auto border border-zinc-200 flex items-center justify-center">
+                      <div className="w-28 h-28 bg-zinc-100 flex flex-col items-center justify-center text-zinc-400 text-[10px] font-bold">
+                        <QrCode className="w-12 h-12 text-zinc-500 mb-1" />
+                        <span>QR CODE DEMO</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">Sua Chave Pix para registro</label>
+                      <input
+                        type="text"
+                        value={pixChave}
+                        onChange={(e) => setPixChave(e.target.value)}
+                        placeholder="Ex: CPF, E-mail ou Celular"
+                        className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-[#e2b874] outline-none transition font-mono"
+                      />
                     </div>
                   </div>
                 )}
@@ -522,23 +765,25 @@ export default function PremiumPaywallModal({
                 <button
                   onClick={handleSubscribe}
                   disabled={isSubmitting}
-                  className="flex-[2] py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20 active:scale-[0.99] transition disabled:opacity-50 cursor-pointer"
+                  className="flex-[2] py-3 bg-[#e2b874] hover:bg-[#d6aa63] text-zinc-950 text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-amber-950/20 active:scale-[0.99] transition disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                      <span>Processando solicitação...</span>
+                      <div className="w-4 h-4 border-2 border-zinc-950/20 border-t-zinc-950 rounded-full animate-spin" />
+                      <span>Processando Pagamento...</span>
                     </>
                   ) : (
                     <>
-                      <Check className="w-4 h-4" />
-                      <span>Confirmar Solicitação ($ USD)</span>
+                      <CreditCard className="w-4 h-4" />
+                      <span>Efetuar Pagamento & Ativar ($ USD)</span>
                     </>
                   )}
                 </button>
               </div>
-            </motion.div>
+            </>
           )}
+        </motion.div>
+      )}
 
           {step === "success" && (
             <motion.div

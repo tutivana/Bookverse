@@ -408,6 +408,9 @@ export async function pushToFirestore(dbData: any): Promise<void> {
           último_acesso: u.lastAccess || new Date().toISOString(),
           status: u.status || "Active"
         });
+      } else {
+        const adminRef = doc(firestoreDb, "admins", u.id);
+        await safeDelete(adminRef);
       }
 
       // Subcollection: progress (users/{userId}/progress/{bookId})

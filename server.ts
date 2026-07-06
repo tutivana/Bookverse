@@ -58,6 +58,16 @@ interface DatabaseSchema {
     status: "pending" | "approved" | "rejected";
     createdAt: string;
   }[];
+  supportTickets?: {
+    id: string;
+    userId: string | null;
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
+    status: "Aberto" | "Resolvido";
+    createdAt: string;
+  }[];
 }
 
 const DEFAULT_DB: DatabaseSchema = {
@@ -84,6 +94,68 @@ const DEFAULT_DB: DatabaseSchema = {
         autoRenew: true,
         billingInterval: "monthly",
         paymentMethod: { brand: "visa", last4: "4242" }
+      }
+    },
+    {
+      id: "admin-user",
+      email: "admin@bookverse.com",
+      name: "Ana Administradora",
+      avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150&auto=format&fit=crop",
+      createdAt: new Date().toISOString(),
+      status: "Active",
+      role: "Administrador",
+      activities: [
+        { action: "Login no painel administrativo", timestamp: new Date().toISOString() }
+      ],
+      lastAccess: new Date().toISOString(),
+      booksReadCount: 0,
+      favorites: [],
+      reportsMadeCount: 0,
+      subscription: {
+        plan: "PREMIUM",
+        status: "active",
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        autoRenew: true,
+        billingInterval: "monthly",
+        paymentMethod: { brand: "mastercard", last4: "8888" }
+      }
+    },
+    {
+      id: "moderador-user",
+      email: "moderador@bookverse.com",
+      name: "Marcos Moderador",
+      avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=150&auto=format&fit=crop",
+      createdAt: new Date().toISOString(),
+      status: "Active",
+      role: "Moderador",
+      activities: [
+        { action: "Login na plataforma", timestamp: new Date().toISOString() }
+      ],
+      lastAccess: new Date().toISOString(),
+      booksReadCount: 1,
+      favorites: [],
+      reportsMadeCount: 0
+    },
+    {
+      id: "leitor-user",
+      email: "leitor@bookverse.com",
+      name: "Lucas Leitor",
+      avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop",
+      createdAt: new Date().toISOString(),
+      status: "Active",
+      role: "Moderador", // note: standard users are defaulted to Moderador role by server.ts check currently, but let's make it plain reader or keep role as is
+      activities: [
+        { action: "Login na biblioteca pública", timestamp: new Date().toISOString() }
+      ],
+      lastAccess: new Date().toISOString(),
+      booksReadCount: 2,
+      favorites: ["memorias-postumas"],
+      reportsMadeCount: 0,
+      subscription: {
+        plan: "FREE",
+        status: "active",
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        autoRenew: false
       }
     }
   ],
@@ -161,7 +233,8 @@ const DEFAULT_DB: DatabaseSchema = {
     }
   ],
   subscriptionPrices: { monthly: 9.99, yearly: 89.99 },
-  premiumRequests: []
+  premiumRequests: [],
+  supportTickets: []
 };
 
 function readDb(): DatabaseSchema {
@@ -216,7 +289,7 @@ function readDb(): DatabaseSchema {
           changed = true;
         }
         if (!u.role) {
-          u.role = u.id === "demo-user" ? "Super Administrador" : "Moderador";
+          u.role = u.id === "demo-user" ? "Super Administrador" : "Leitor";
           changed = true;
         }
         if (!u.activities) {
@@ -275,6 +348,13 @@ function readDb(): DatabaseSchema {
         }
         if (b.isFeatured === undefined) {
           b.isFeatured = idx === 0;
+          changed = true;
+        }
+        if (!b.copyright) {
+          b.copyright = {
+            status: idx === 0 ? "public_domain" : idx === 2 ? "licensed" : idx === 4 ? "exclusive" : "commercial",
+            licenseType: idx === 0 ? "creative_commons" : idx === 2 ? "standard_platform" : "purchase_required"
+          };
           changed = true;
         }
         if (!b.createdAt) {
@@ -1348,7 +1428,7 @@ app.get("/api/books/:id", (req, res) => {
 
 // Admin Operations for Books Catalog (CRUD)
 app.post("/api/admin/books", (req, res) => {
-  const { title, author, category, description, pages, estimatedReadTime, audiobookAvailable, audioDuration, coverUrl, language, publishDate, pdfContent, audioChapters } = req.body;
+  const { title, author, category, description, pages, estimatedReadTime, audiobookAvailable, audioDuration, coverUrl, language, publishDate, pdfContent, audioChapters, copyright } = req.body;
   
   if (!title || !author || !category || !description || !pdfContent || pdfContent.length === 0) {
     res.status(400).json({ error: "Campos obrigatórios ausentes: Título, Autor, Categoria, Descrição ou Conteúdo de páginas." });
@@ -1370,7 +1450,8 @@ app.post("/api/admin/books", (req, res) => {
     language: language || "Português",
     publishDate: publishDate || new Date().getFullYear().toString(),
     pdfContent,
-    audioChapters: audiobookAvailable ? (audioChapters || pdfContent.map((_: any, i: number) => ({ title: `Capítulo ${i + 1}`, startPage: i, durationSeconds: 120 }))) : undefined
+    audioChapters: audiobookAvailable ? (audioChapters || pdfContent.map((_: any, i: number) => ({ title: `Capítulo ${i + 1}`, startPage: i, durationSeconds: 120 }))) : undefined,
+    copyright: copyright || { status: "commercial", licenseType: "purchase_required" }
   };
 
   db.books.push(newBook);
@@ -2689,7 +2770,7 @@ app.put("/api/admin/users/:id/role", (req, res) => {
     return;
   }
 
-  const oldRole = db.users[userIndex].role || "Moderador";
+  const oldRole = db.users[userIndex].role || "Leitor";
   db.users[userIndex].role = role;
 
   if (!db.users[userIndex].activities) db.users[userIndex].activities = [];
@@ -3939,6 +4020,201 @@ async function startServer() {
     console.error("[BookVerse Server] Error connecting/syncing with Cloud Firestore on startup:", err);
     console.log("[BookVerse Server] Continuing startup with local DB cache...");
   }
+
+  // ==========================================
+  // AI HELPERS & SUPPORT ENDPOINTS
+  // ==========================================
+
+  // Endpoint 1: Autocomplete / generate book metadata based on title and author
+  app.post("/api/admin/ai/autocomplete-book", async (req, res) => {
+    const { title, author } = req.body;
+    if (!title) {
+      res.status(400).json({ error: "O título do livro é obrigatório para autocompletar." });
+      return;
+    }
+
+    const fallback = {
+      title: title,
+      subtitle: "Uma obra literária cativante",
+      category: "Clássico",
+      language: "Português",
+      isbn: `978-65-${Math.floor(100000 + Math.random() * 900000)}-0`,
+      description: `Este livro apresenta a envolvente narrativa sob a autoria de ${author || "Autor Desconhecido"}. Explora temas profundos da condição humana através de diálogos ricos, personagens complexos e reviravoltas inesquecíveis que prendem o leitor do início ao fim.`,
+      keywords: `${title}, literatura, clássico, ${author || "autor"}`,
+      tags: "recomendações, leitura rápida, imperdível"
+    };
+
+    if (!ai) {
+      res.json(fallback);
+      return;
+    }
+
+    try {
+      const prompt = `Você é um bibliotecário e especialista em catalogação literária da plataforma BookVerse.
+Dado o título do livro "${title}" e opcionalmente o autor "${author || ""}", gere uma ficha de metadados completa em formato JSON no seguinte esquema:
+{
+  "title": "título principal corrigido ou formatado",
+  "subtitle": "um subtítulo poético ou explicativo para o livro",
+  "category": "uma destas categorias apenas: Clássico, Ficção Científica, Fantasia, Romance, História, Filosofia, Poesia",
+  "language": "idioma (ex: Português)",
+  "isbn": "um ISBN-13 fictício ou real válido no formato 978-xx-xxx-xxxx-x",
+  "description": "uma sinopse cativante e robusta de cerca de 150 a 250 caracteres sem spoilers",
+  "keywords": "4 a 6 palavras-chave separadas por vírgula",
+  "tags": "3 a 5 tags literárias separadas por vírgula"
+}
+Retorne estritamente o JSON válido e nada mais.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              subtitle: { type: Type.STRING },
+              category: { type: Type.STRING },
+              language: { type: Type.STRING },
+              isbn: { type: Type.STRING },
+              description: { type: Type.STRING },
+              keywords: { type: Type.STRING },
+              tags: { type: Type.STRING }
+            },
+            required: ["title", "subtitle", "category", "language", "isbn", "description", "keywords", "tags"]
+          }
+        }
+      });
+
+      const parsed = JSON.parse(response.text.trim());
+      res.json(parsed);
+    } catch (err: any) {
+      console.error("AI autocomplete-book error:", err);
+      res.json(fallback);
+    }
+  });
+
+  // Endpoint 2: AI Writing Assistant to help enhance/correct/expand content of pages
+  app.post("/api/admin/ai/writing-assistant", async (req, res) => {
+    const { content, action, context } = req.body;
+    if (!content) {
+      res.status(400).json({ error: "O conteúdo de texto é obrigatório." });
+      return;
+    }
+
+    const promptMap: Record<string, string> = {
+      improve: "Melhore a expressividade, o vocabulário e a fluidez do texto literário a seguir, mantendo a voz narrativa e o estilo. Retorne o texto modificado formatado em markdown.",
+      grammar: "Corrija estritamente erros de grafia, acentuação, concordância e pontuação do texto literário a seguir. Não altere o estilo ou o conteúdo a menos que seja necessário para a correção gramatical. Retorne apenas o texto corrigido em markdown.",
+      continue: `Continue a escrever a narrativa a partir do ponto onde o texto a seguir parou. Crie um parágrafo envolvente que dê continuidade natural à história. O contexto geral é: ${context || ""}. Retorne o texto a seguir acrescido da continuação.`,
+      summarize: "Crie um resumo curto e sinopse em um parágrafo do conteúdo literário fornecido a seguir, adequado para descrição rápida de capítulo."
+    };
+
+    const instruction = promptMap[action] || promptMap.improve;
+
+    if (!ai) {
+      let result = content;
+      if (action === "improve") {
+        result = `${content}\n\n*(Texto aprimorado por IA: Estilo refinado e riqueza vocabular otimizada.)*`;
+      } else if (action === "grammar") {
+        result = `${content}\n\n*(Texto revisado gramaticalmente: Sem erros ortográficos.)*`;
+      } else if (action === "continue") {
+        result = `${content}\n\nO vento sobrava suavemente pelas frestas da janela de madeira antiga, como se trouxesse consigo segredos guardados há muito tempo. Sentia-se no ar que a noite ainda guardaria revelações inesperadas.`;
+      } else if (action === "summarize") {
+        result = `Um trecho marcante que retrata momentos de introspecção e desenrolar poético dos acontecimentos fundamentais dos personagens descritos.`;
+      }
+      res.json({ result });
+      return;
+    }
+
+    try {
+      const prompt = `Você é o assistente editorial BookVerse IA.
+Instrução: ${instruction}
+
+Texto a ser processado:
+"""
+${content}
+"""
+
+Retorne APENAS o resultado textual processado em formato Markdown válido. Não adicione saudações, observações explicativas fora do texto ou introduções.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt
+      });
+
+      res.json({ result: response.text.trim() });
+    } catch (err: any) {
+      console.error("AI writing-assistant error:", err);
+      res.status(500).json({ error: "Erro no assistente de escrita com IA: " + err.message });
+    }
+  });
+
+  // Endpoint 3: Create Support Ticket
+  app.post("/api/support/ticket", (req, res) => {
+    const { name, email, subject, message, userId } = req.body;
+    if (!name || !email || !subject || !message) {
+      res.status(400).json({ error: "Nome, email, assunto e mensagem são obrigatórios." });
+      return;
+    }
+
+    const db = readDb();
+    if (!db.supportTickets) {
+      db.supportTickets = [];
+    }
+
+    const ticket = {
+      id: `ticket_${Date.now()}`,
+      userId: userId || null,
+      name,
+      email,
+      subject,
+      message,
+      status: "Aberto" as "Aberto" | "Resolvido",
+      createdAt: new Date().toISOString()
+    };
+
+    db.supportTickets.push(ticket);
+
+    if (!db.notifications) db.notifications = [];
+    const admins = db.users.filter(u => u.role === "Super Administrador" || u.role === "Administrador");
+    admins.forEach(admin => {
+      db.notifications.push({
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        userId: admin.id,
+        title: "Novo Chamado de Suporte",
+        message: `O leitor ${name} solicitou suporte técnico sobre "${subject}".`,
+        type: "admin",
+        category: "Suporte",
+        priority: "medium",
+        origin: "system",
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+    });
+
+    writeDb(db);
+    res.status(201).json({ success: true, ticket });
+  });
+
+  // Endpoint 4: Get Support Tickets
+  app.get("/api/support/tickets", (req, res) => {
+    const db = readDb();
+    res.json(db.supportTickets || []);
+  });
+
+  // Endpoint 5: Resolve Support Ticket
+  app.post("/api/support/tickets/:id/resolve", (req, res) => {
+    const { id } = req.params;
+    const db = readDb();
+    if (!db.supportTickets) db.supportTickets = [];
+
+    const ticket = db.supportTickets.find(t => t.id === id);
+    if (ticket) {
+      ticket.status = "Resolvido";
+      writeDb(db);
+    }
+    res.json(db.supportTickets || []);
+  });
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

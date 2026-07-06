@@ -631,4 +631,57 @@ export async function adminAiAssistantChat(adminId: string, message: string): Pr
   return res.json();
 }
 
+export async function adminAiAutocompleteBook(title: string, author: string): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/autocomplete-book`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, author }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao autocompletar dados do livro com IA.");
+  }
+  return res.json();
+}
+
+export async function adminAiWritingAssistant(content: string, action: string, context?: string): Promise<{ result: string }> {
+  const res = await fetch(`${BASE_URL}/api/admin/ai/writing-assistant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, action, context }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro no assistente de escrita da IA.");
+  }
+  return res.json();
+}
+
+export async function createSupportTicket(ticketData: { name: string; email: string; subject: string; message: string; userId?: string }): Promise<{ success: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/support/ticket`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(ticketData),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Erro ao enviar chamado de suporte.");
+  }
+  return res.json();
+}
+
+export async function fetchSupportTickets(): Promise<any[]> {
+  const res = await fetch(`${BASE_URL}/api/support/tickets`);
+  if (!res.ok) throw new Error("Erro ao buscar chamados de suporte");
+  return res.json();
+}
+
+export async function resolveSupportTicket(id: string): Promise<any[]> {
+  const res = await fetch(`${BASE_URL}/api/support/tickets/${id}/resolve`, {
+    method: "POST"
+  });
+  if (!res.ok) throw new Error("Erro ao marcar chamado como resolvido");
+  return res.json();
+}
+
 

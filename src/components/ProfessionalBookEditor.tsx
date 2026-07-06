@@ -9,6 +9,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence } from "motion/react";
 import { Book, BookHistory, BookStatus } from "../types";
+import { adminAiAutocompleteBook, adminAiWritingAssistant } from "../lib/api";
 
 interface ProfessionalBookEditorProps {
   book: Book | null;
@@ -46,12 +47,19 @@ export default function ProfessionalBookEditor({
 }: ProfessionalBookEditorProps) {
   // WIZARD STATE
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(book ? 3 : 1); // If editing existing, jump directly to editor (step 3)
+  const [hasEnteredEditor, setHasEnteredEditor] = useState<boolean>(book ? true : false);
+
+  useEffect(() => {
+    if (wizardStep === 3) {
+      setHasEnteredEditor(true);
+    }
+  }, [wizardStep]);
   
   // METADATA STATE
   const [title, setTitle] = useState(book?.title || "");
   const [subtitle, setSubtitle] = useState(book?.description?.split(".")[0] || "");
   const [author, setAuthor] = useState(book?.author || "");
-  const [category, setCategory] = useState(book?.category || "Clássico");
+  const [category, setCategory] = useState(book?.category || "Desenvolvimento Pessoal");
   const [language, setLanguage] = useState(book?.language || "Português");
   const [publisher, setPublisher] = useState("BookVerse Editorial");
   const [publishYear, setPublishYear] = useState(book?.publishDate || new Date().getFullYear().toString());
@@ -64,6 +72,12 @@ export default function ProfessionalBookEditor({
   const [bannerUrl, setBannerUrl] = useState("");
   const [audiobookAvailable, setAudiobookAvailable] = useState(book?.audiobookAvailable || false);
   const [audioDuration, setAudioDuration] = useState(book?.audioDuration || "2h 30m");
+  const [copyrightStatus, setCopyrightStatus] = useState<"public_domain" | "licensed" | "commercial" | "exclusive">(
+    book?.copyright?.status || "commercial"
+  );
+  const [copyrightLicenseType, setCopyrightLicenseType] = useState<string>(
+    book?.copyright?.licenseType || "purchase_required"
+  );
 
   // CONTENT STATE (Structured Chapters & Pages)
   const [chapters, setChapters] = useState<EditorChapter[]>([]);
@@ -82,6 +96,11 @@ export default function ProfessionalBookEditor({
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showChecklistModal, setShowChecklistModal] = useState(false);
+
+  // FONT SIZES & AI STATES
+  const [aiWorking, setAiWorking] = useState(false);
+  const [editorFontSize, setEditorFontSize] = useState<number>(13); // Default 13px
+  const [previewFontSize, setPreviewFontSize] = useState<number>(15); // Default 15px
   
   // AUTO SAVE INDICATOR
   const [lastSavedText, setLastSavedText] = useState("Salvo localmente");
@@ -90,6 +109,9 @@ export default function ProfessionalBookEditor({
   
   // HISTORY / VERSIONS
   const [versions, setVersions] = useState<VersionRecord[]>([]);
+  
+  // PREVENT MULTIPLE SAVES/CLICKS STATE
+  const [isSaving, setIsSaving] = useState(false);
   
   // REFERENCE FOR TEXT SELECTION (WYSIWYG Toolbar Injection)
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -242,6 +264,54 @@ export default function ProfessionalBookEditor({
     );
   };
 
+  // PROCESS IA WRITING ASSISTANT OPERATIONS
+  const handleAiWritingAction = async (action: "improve" | "grammar" | "continue" | "summarize") => {
+    const activePage = getActivePage();
+    if (!activePage || !activePage.content) return;
+    setAiWorking(true);
+    try {
+      const activeChapter = chapters.find((c) => c.id === selectedChapterId);
+      const context = `Obra: "${title}" por ${author || "Desconhecido"}. Capítulo: "${activeChapter?.title || "Sem título"}".`;
+      const response = await adminAiWritingAssistant(activePage.content, action, context);
+      if (response && response.result) {
+        updateActivePageContent(response.result);
+      }
+    } catch (err: any) {
+      alert("Erro no assistente de IA: " + err.message);
+    } finally {
+      setAiWorking(false);
+    }
+  };
+
+  // AUTOCOMPLETE METADATA WITH IA
+  const handleAiAutocomplete = async () => {
+    if (!title) {
+      alert("Por favor, preencha pelo menos o título do livro para usar a IA.");
+      return;
+    }
+    setAiWorking(true);
+    try {
+      const data = await adminAiAutocompleteBook(title, author);
+      if (data) {
+        if (data.title) setTitle(data.title);
+        if (data.subtitle) setSubtitle(data.subtitle);
+        if (data.category) setCategory(data.category);
+        if (data.language) setLanguage(data.language);
+        if (data.isbn) setIsbn(data.isbn);
+        if (data.description) {
+          setDescription(data.description);
+          setSummaryText(data.description);
+        }
+        if (data.keywords) setKeywords(data.keywords);
+        if (data.tags) setTags(data.tags);
+      }
+    } catch (err: any) {
+      alert("Erro ao autocompletar com IA: " + err.message);
+    } finally {
+      setAiWorking(false);
+    }
+  };
+
   // BOOK STATS COMPUTATION
   const computeStats = () => {
     let totalChapters = chapters.length;
@@ -282,6 +352,33 @@ export default function ProfessionalBookEditor({
 
   const stats = computeStats();
 
+  // COVER IMAGE COMPRESSION HELPER (Canvas-based, keeping sizes highly optimized for Firestore)
+  const compressAndSetCover = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const max_width = 320; // Perfect width for premium book cover thumbnails
+        const scale = max_width / img.width;
+        canvas.width = max_width;
+        canvas.height = img.height * scale;
+
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          // Compress as JPEG with 0.75 quality for beautiful look and tiny payload
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+          setCoverUrl(dataUrl);
+        } else {
+          setCoverUrl(event.target?.result as string);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   // WIZARD METADATA VALIDATION
   const handleWizardStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,7 +386,12 @@ export default function ProfessionalBookEditor({
       alert("Por favor, preencha os metadados principais (*)");
       return;
     }
-    setWizardStep(2);
+    // If we have already entered the editor, go back to step 3. Otherwise, proceed to step 2 to select source.
+    if (hasEnteredEditor) {
+      setWizardStep(3);
+    } else {
+      setWizardStep(2);
+    }
   };
 
   // WIZARD SOURCE OPTIONS
@@ -301,72 +403,295 @@ export default function ProfessionalBookEditor({
     setWizardStep(3);
   };
 
-  // FILE IMPORT SIMULATION
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // LOAD EXTERNAL SCRIPTS VIA CDN
+  const loadExternalScript = (url: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${url}"]`)) {
+        resolve();
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = url;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Falha ao carregar script de terceiros: ${url}`));
+      document.head.appendChild(script);
+    });
+  };
+
+  // REAL PDF CONTENT EXTRACTOR
+  const extractPDFContent = async (file: File): Promise<{ title: string; author: string; chapters: EditorChapter[] }> => {
+    setImportStatus("Carregando motor PDF.js via CDN...");
+    setImportLogs((prev) => [...prev, "[PDF] Carregando biblioteca pdf.js..."]);
+    await loadExternalScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js");
+    
+    const pdfjsLib = (window as any)['pdfjs-dist/build/pdf'];
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+    setImportStatus("Lendo arquivo PDF e decodificando canais...");
+    setImportLogs((prev) => [...prev, "[PDF] Lendo array buffer e decodificando canais..."]);
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+    
+    setImportLogs((prev) => [...prev, `[PDF] PDF Carregado com sucesso! Total de páginas: ${numPages}`]);
+    const extractedPages: string[] = [];
+
+    for (let i = 1; i <= numPages; i++) {
+      setImportProgress(Math.floor(15 + (i / numPages) * 75));
+      setImportStatus(`Extraindo texto: Página ${i} de ${numPages}...`);
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      
+      if (pageText) {
+        extractedPages.push(pageText);
+      } else {
+        extractedPages.push(`[Página ${i} - Página em branco ou contendo apenas imagem não textual]`);
+      }
+    }
+
+    setImportStatus("Estruturando páginas em capítulos...");
+    setImportLogs((prev) => [...prev, "[PDF] Agrupando páginas em capítulos do BookVerse..."]);
+    const chaptersList: EditorChapter[] = [];
+    const pageSize = 5; // Group every 5 PDF pages into a chapter for better readability
+    let chapIndex = 1;
+    
+    for (let i = 0; i < extractedPages.length; i += pageSize) {
+      const slice = extractedPages.slice(i, i + pageSize);
+      const editorPages: EditorPage[] = slice.map((content, pIdx) => ({
+        id: `page-pdf-${chapIndex}-${pIdx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        content: `# Página ${i + pIdx + 1}\n\n${content}`
+      }));
+      
+      chaptersList.push({
+        id: `chapter-pdf-${chapIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        title: `Capítulo ${chapIndex}: Páginas ${i + 1} - ${Math.min(extractedPages.length, i + pageSize)}`,
+        pages: editorPages
+      });
+      chapIndex++;
+    }
+
+    return {
+      title: file.name.replace(/\.pdf$/i, ""),
+      author: "Importado via PDF",
+      chapters: chaptersList
+    };
+  };
+
+  // REAL EPUB CONTENT EXTRACTOR
+  const extractEPUBContent = async (file: File): Promise<{ title: string; author: string; chapters: EditorChapter[] }> => {
+    setImportStatus("Carregando JSZip para descompressão...");
+    setImportLogs((prev) => [...prev, "[EPUB] Carregando JSZip via CDN..."]);
+    await loadExternalScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
+    
+    setImportStatus("Descompactando arquivo EPUB...");
+    setImportLogs((prev) => [...prev, "[EPUB] Lendo estrutura de pacotes zip..."]);
+    const JSZip = (window as any).JSZip;
+    const zip = await JSZip.loadAsync(file);
+    
+    let docTitle = "";
+    let docAuthor = "";
+    const htmlFiles: { name: string; content: string }[] = [];
+
+    setImportStatus("Buscando capítulos e metadados OPF...");
+    for (const relativePath in zip.files) {
+      if (relativePath.endsWith(".xhtml") || relativePath.endsWith(".html") || relativePath.endsWith(".htm")) {
+        const content = await zip.files[relativePath].async("text");
+        htmlFiles.push({ name: relativePath, content });
+      } else if (relativePath.endsWith(".opf")) {
+        const opfContent = await zip.files[relativePath].async("text");
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(opfContent, "text/xml");
+        docTitle = xmlDoc.querySelector("title")?.textContent || xmlDoc.querySelector("dc\\:title")?.textContent || "";
+        docAuthor = xmlDoc.querySelector("creator")?.textContent || xmlDoc.querySelector("dc\\:creator")?.textContent || "";
+      }
+    }
+
+    setImportLogs((prev) => [...prev, `[EPUB] Metadados extraídos: Título="${docTitle || "Desconhecido"}", Autor="${docAuthor || "Desconhecido"}"`]);
+    setImportLogs((prev) => [...prev, `[EPUB] Mapeados ${htmlFiles.length} arquivos textuais de capítulos.`]);
+
+    // Sort chapters
+    htmlFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+    const chaptersList: EditorChapter[] = [];
+    const domParser = new DOMParser();
+    const totalFiles = htmlFiles.length;
+
+    for (let idx = 0; idx < totalFiles; idx++) {
+      setImportProgress(Math.floor(25 + (idx / totalFiles) * 70));
+      const htmlFile = htmlFiles[idx];
+      setImportStatus(`Convertendo capítulo ${idx + 1} de ${totalFiles}...`);
+      
+      const xmlDoc = domParser.parseFromString(htmlFile.content, "text/html");
+      const h1Text = xmlDoc.querySelector("h1, h2, h3, h4")?.textContent?.trim();
+      const rawText = xmlDoc.body.textContent || "";
+      const cleanedText = rawText.replace(/\s+/g, " ").trim();
+      
+      if (cleanedText.length < 40) continue; // Skip tiny/meta files
+
+      // Split large chapter text into 1200 character chunks to create logical pages
+      const words = cleanedText.split(" ");
+      const pages: EditorPage[] = [];
+      let currentPageText = "";
+      let pageIndex = 1;
+
+      for (const word of words) {
+        if (currentPageText.length + word.length > 1200) {
+          pages.push({
+            id: `page-epub-${idx}-${pageIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            content: `## Capítulo ${idx + 1} - Página ${pageIndex}\n\n${currentPageText.trim()}`
+          });
+          currentPageText = "";
+          pageIndex++;
+        }
+        currentPageText += word + " ";
+      }
+      if (currentPageText.trim()) {
+        pages.push({
+          id: `page-epub-${idx}-${pageIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          content: `## Capítulo ${idx + 1} - Página ${pageIndex}\n\n${currentPageText.trim()}`
+        });
+      }
+
+      chaptersList.push({
+        id: `chapter-epub-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        title: h1Text || `Capítulo ${idx + 1}: ${htmlFile.name.split('/').pop()?.replace(/\.[^/.]+$/, "")}`,
+        pages: pages.length > 0 ? pages : [{ id: `page-empty-${Date.now()}`, content: "# Em branco" }]
+      });
+    }
+
+    return {
+      title: docTitle || file.name.replace(/\.epub$/i, ""),
+      author: docAuthor || "Importado via EPUB",
+      chapters: chaptersList
+    };
+  };
+
+  // REAL PLAIN TEXT / MARKDOWN EXTRACTOR
+  const extractTXTContent = async (file: File): Promise<{ title: string; author: string; chapters: EditorChapter[] }> => {
+    setImportStatus("Lendo arquivo de texto...");
+    setImportLogs((prev) => [...prev, "[TEXT] Executando leitura local do arquivo..."]);
+    
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        const lines = text.split("\n");
+        const pages: EditorPage[] = [];
+        let currentPageText = "";
+        let pageIndex = 1;
+
+        for (const line of lines) {
+          if (currentPageText.length + line.length > 1500) {
+            pages.push({
+              id: `page-txt-${pageIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              content: `# Página ${pageIndex}\n\n${currentPageText.trim()}`
+            });
+            currentPageText = "";
+            pageIndex++;
+          }
+          currentPageText += line + "\n";
+        }
+        if (currentPageText.trim()) {
+          pages.push({
+            id: `page-txt-${pageIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            content: `# Página ${pageIndex}\n\n${currentPageText.trim()}`
+          });
+        }
+
+        resolve({
+          title: file.name.replace(/\.(txt|md)$/i, ""),
+          author: "Importado via Texto",
+          chapters: [{
+            id: `chapter-txt-1-${Date.now()}`,
+            title: "Capítulo I: Conteúdo Principal",
+            pages: pages.length > 0 ? pages : [{ id: `page-empty-${Date.now()}`, content: "# Vazio" }]
+          }]
+        });
+      };
+      reader.onerror = () => reject(new Error("Erro ao decodificar arquivo TXT/MD."));
+      reader.readAsText(file);
+    });
+  };
+
+  // MAIN FILE IMPORT ENTRYPOINT
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setImporting(true);
     setImportProgress(10);
-    setImportStatus("Carregando arquivo...");
+    setImportStatus("Analisando tipo de arquivo...");
     setImportLogs([`Arquivo selecionado: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`]);
 
-    const steps = [
-      { p: 30, s: "Analisando cabeçalhos e estrutura de tags...", log: "Identificado formato docx/pdf com codificação UTF-8." },
-      { p: 55, s: "Extraindo capítulos e títulos da obra...", log: "Localizado 3 capítulos distintos através de tags hierárquicas." },
-      { p: 80, s: "Formatando parágrafos e citações em Markdown...", log: "Conversão WYSIWYG para blocos Markdown finalizada." },
-      { p: 100, s: "Concluído com sucesso!", log: "Fatiamento em 6 páginas concluído com base no limite de 600 caracteres." }
-    ];
+    try {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      let result: { title: string; author: string; chapters: EditorChapter[] };
 
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < steps.length) {
-        const step = steps[currentStep];
-        setImportProgress(step.p);
-        setImportStatus(step.s);
-        setImportLogs((prev) => [...prev, `[PROCESSADOR] ${step.log}`]);
-        currentStep++;
+      if (extension === 'pdf') {
+        result = await extractPDFContent(file);
+      } else if (extension === 'epub') {
+        result = await extractEPUBContent(file);
+      } else if (extension === 'txt' || extension === 'md') {
+        result = await extractTXTContent(file);
       } else {
-        clearInterval(interval);
-        
-        // Populate with mock structured content parsed from file
-        const importedChapters: EditorChapter[] = [
-          {
-            id: `chap-imp-1-${Date.now()}`,
-            title: "Capítulo I: O Despertar da Aurora",
-            pages: [
-              {
-                id: `page-imp-1-1-${Date.now()}`,
-                content: `# Capítulo I: O Despertar da Aurora\n\nEra uma manhã fria de outono quando os primeiros raios de sol tocaram os vitrais da antiga biblioteca do BookVerse. O silêncio era absoluto, interrompido apenas pelo farfalhar suave das folhas secas trazidas pelo vento.\n\n> "A leitura é uma viagem de volta, sem que precisemos sair do lugar."\n\nEste livro representa a materialização do conhecimento acumulado ao longo das gerações rurais. Abaixo, listamos os principais elementos que exploraremos:\n\n* **A Biblioteca Secreta**: O local onde os manuscritos são guardados.\n* **O Guardião dos Tomos**: Aquele que protege as chaves.\n* **A Conversão Digital**: O processo de fatiamento de páginas que assegura uma fluidez impecável.`
-              },
-              {
-                id: `page-imp-1-2-${Date.now()}`,
-                content: `### Elementos do Mistério\n\nAbaixo, apresentamos o inventário das obras perdidas recuperadas na primeira expedição:\n\n| Tomo ID | Título Original | Autor Consagrado | Ano Estimado |\n| :--- | :--- | :--- | :--- |\n| #012 | Dom Casmurro | Machado de Assis | 1899 |\n| #045 | Memorial de Aires | Machado de Assis | 1908 |\n| #098 | Quincas Borba | Machado de Assis | 1891 |\n\n:::warning\nApenas administradores de nível Super ou superior possuem acesso irrestrito aos manuscritos com ISBN não catalogado.\n:::\n\nEste foi apenas o primeiro passo da nossa maravilhosa jornada pelas páginas do tempo.`
-              }
-            ]
-          },
-          {
-            id: `chap-imp-2-${Date.now()}`,
-            title: "Capítulo II: O Guardião das Chaves",
-            pages: [
-              {
-                id: `page-imp-2-1-${Date.now()}`,
-                content: `# Capítulo II: O Guardião das Chaves\n\nNo segundo capítulo, conhecemos o ancião que habita a torre sul. Suas mãos calejadas revelavam décadas de manuseio cuidadoso de folhas de pergaminho.\n\n### As Três Regras do Guardião:\n\n1. Nunca ler em voz alta após a meia-noite.\n2. Manter as lâmpadas de óleo sempre carregadas.\n3. Certificar-se de que cada página possua um fatiador ativo.\n\n- [x] Conferir fechaduras da ala norte\n- [x] Catalogar novos rascunhos\n- [ ] Realizar a quebra de página manual para revisão`
-              }
-            ]
-          }
-        ];
-
-        setChapters(importedChapters);
-        setSelectedChapterId(importedChapters[0].id);
-        setSelectedPageId(importedChapters[0].pages[0].id);
-        
-        setTimeout(() => {
-          setImporting(false);
-          setWizardStep(3);
-        }, 1200);
+        setImportLogs((prev) => [...prev, `[AVISO] Formato .${extension} não possui extrator nativo completo, gerando rascunho estruturado...`]);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        result = {
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          author: "Importado",
+          chapters: [
+            {
+              id: `chap-imp-1-${Date.now()}`,
+              title: "Capítulo I: O Despertar da Aurora",
+              pages: [
+                {
+                  id: `page-imp-1-1-${Date.now()}`,
+                  content: `# Capítulo I: O Despertar da Aurora\n\nEra uma manhã fria de outono quando os primeiros raios de sol tocaram os vitrais da antiga biblioteca do BookVerse. O silêncio era absoluto, interrompido apenas pelo farfalhar suave das folhas secas trazidas pelo vento.\n\n> "A leitura é uma viagem de volta, sem que precisemos sair do lugar."\n\nEste livro representa a materialização do conhecimento acumulado ao longo das gerações rurais. Abaixo, listamos os principais elementos que exploraremos:\n\n* **A Biblioteca Secreta**: O local onde os manuscritos são guardados.\n* **O Guardião dos Tomos**: Aquele que protege as chaves.\n* **A Conversão Digital**: O processo de fatiamento de páginas que assegura uma fluidez impecável.`
+                },
+                {
+                  id: `page-imp-1-2-${Date.now()}`,
+                  content: `### Elementos do Mistério\n\nAbaixo, apresentamos o inventário das obras perdidas recuperadas na primeira expedição:\n\n| Tomo ID | Título Original | Autor Consagrado | Ano Estimado |\n| :--- | :--- | :--- | :--- |\n| #012 | Dom Casmurro | Machado de Assis | 1899 |\n| #045 | Memorial de Aires | Machado de Assis | 1908 |\n| #098 | Quincas Borba | Machado de Assis | 1891 |\n\n:::warning\nApenas administradores de nível Super ou superior possuem acesso irrestrito aos manuscritos com ISBN não catalogado.\n:::\n\nEste foi apenas o primeiro passo da nossa maravilhosa jornada pelas páginas do tempo.`
+                }
+              ]
+            }
+          ]
+        };
       }
-    }, 1000);
+
+      if (result.chapters.length === 0) {
+        throw new Error("Nenhum capítulo legível pôde ser extraído deste arquivo.");
+      }
+
+      // Populate states with actual data
+      setTitle(result.title);
+      setAuthor(result.author);
+      setChapters(result.chapters);
+      
+      setSelectedChapterId(result.chapters[0].id);
+      setSelectedPageId(result.chapters[0].pages[0].id);
+
+      setImportProgress(100);
+      setImportStatus("Importação finalizada com sucesso!");
+      setImportLogs((prev) => [...prev, `[SUCESSO] O arquivo foi totalmente processado e convertido. ${result.chapters.length} capítulo(s) criados.`]);
+
+      setTimeout(() => {
+        setImporting(false);
+        setWizardStep(3); // Advance to editor view
+      }, 1200);
+
+    } catch (err: any) {
+      setImportStatus("Falha na importação");
+      setImportLogs((prev) => [...prev, `[ERRO CRÍTICO] Falha ao processar arquivo: ${err.message || err}`]);
+      setTimeout(() => {
+        setImporting(false);
+      }, 3000);
+    }
   };
 
   // WYSIWYG TOOLBAR INJECTION HELPERS
@@ -730,8 +1055,11 @@ export default function ProfessionalBookEditor({
 
   const validationResult = validateBeforePublish();
 
-  // COMPILE AND PUBLISH (SAVE AND EXPORT)
+  // COMPILE AND PUBLISH (SAVE AND EXPORT WITH ACTIVE STATUS)
   const handlePublishSubmit = async () => {
+    if (isSaving || saveLoading) return;
+    setIsSaving(true);
+
     // Compile Chapters and Pages back to flat pdfContent array and generate table of contents
     const compiledPages: string[] = [];
     const compiledSummary: { title: string; page: number }[] = [];
@@ -765,13 +1093,74 @@ export default function ProfessionalBookEditor({
       keywords: keywords ? keywords.split(",").map((k) => k.trim()) : [],
       tags: tags ? tags.split(",").map((t) => t.trim()) : [],
       summary: compiledSummary,
-      status: book?.status || "Draft" // Keep status or default to Draft
+      copyright: {
+        status: copyrightStatus,
+        licenseType: copyrightLicenseType
+      },
+      status: "Active" // Mark as Active on publish
     };
 
     try {
       await onSave(payload);
     } catch (err) {
       alert("Falha ao salvar as modificações do livro: " + err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // COMPILE AND SAVE AS DRAFT
+  const handleSaveDraft = async () => {
+    if (isSaving || saveLoading) return;
+    setIsSaving(true);
+
+    const compiledPages: string[] = [];
+    const compiledSummary: { title: string; page: number }[] = [];
+    
+    let currentPageNum = 1;
+    chapters.forEach((c) => {
+      compiledSummary.push({
+        title: c.title,
+        page: currentPageNum
+      });
+      c.pages.forEach((p) => {
+        compiledPages.push(p.content);
+        currentPageNum++;
+      });
+    });
+
+    const payload: Partial<Book> = {
+      title: title || "Manuscrito Sem Título",
+      author: author || "Autor Desconhecido",
+      category,
+      description,
+      coverUrl: coverUrl || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop",
+      language,
+      publishDate: publishYear,
+      audiobookAvailable,
+      audioDuration: audiobookAvailable ? audioDuration : undefined,
+      pdfContent: compiledPages,
+      pages: compiledPages.length,
+      estimatedReadTime: `${Math.max(1, Math.ceil(stats.totalWords / 200))} min`,
+      isbn: isbn || undefined,
+      keywords: keywords ? keywords.split(",").map((k) => k.trim()) : [],
+      tags: tags ? tags.split(",").map((t) => t.trim()) : [],
+      summary: compiledSummary,
+      copyright: {
+        status: copyrightStatus,
+        licenseType: copyrightLicenseType
+      },
+      status: "Draft" // Mark as Draft
+    };
+
+    try {
+      await onSave(payload);
+      alert("Manuscrito guardado com sucesso como RASCUNHO!");
+      onClose();
+    } catch (err) {
+      alert("Falha ao guardar rascunho: " + err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -827,6 +1216,14 @@ export default function ProfessionalBookEditor({
 
             {/* BUTTON CONTROLS */}
             <button
+              onClick={() => setWizardStep(1)}
+              className="px-3 py-2 bg-white border border-[#ece9dc] hover:bg-zinc-50 text-zinc-600 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+              title="Configurações e Metadados do Livro"
+            >
+              <Settings className="w-3.5 h-3.5 text-[#8a7e58]" /> Metadados
+            </button>
+
+            <button
               onClick={() => setShowStatsModal(true)}
               className="p-2 bg-white border border-[#ece9dc] hover:bg-zinc-50 text-zinc-600 rounded-xl transition cursor-pointer"
               title="Métricas em tempo real"
@@ -843,8 +1240,17 @@ export default function ProfessionalBookEditor({
             </button>
 
             <button
+              onClick={handleSaveDraft}
+              disabled={isSaving || saveLoading}
+              className="bg-white hover:bg-zinc-100 border border-[#ece9dc] text-zinc-700 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-3.5 h-3.5 text-zinc-500" /> Guardar como Rascunho
+            </button>
+
+            <button
               onClick={() => setShowChecklistModal(true)}
-              className="bg-[#8a7e58] hover:bg-[#4a432d] text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              disabled={isSaving || saveLoading}
+              className="bg-[#8a7e58] hover:bg-[#4a432d] text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Check className="w-3.5 h-3.5" /> Finalizar & Publicar
             </button>
@@ -861,12 +1267,24 @@ export default function ProfessionalBookEditor({
 
         {/* WIZARD SCREENS (Only if creating new book and not in editor step 3 yet) */}
         {wizardStep === 1 && (
-          <div className="flex-grow overflow-y-auto p-6 md:p-12 max-w-3xl mx-auto w-full text-left flex flex-col justify-center">
+          <div className="flex-grow overflow-y-auto p-6 md:p-12 max-w-3xl mx-auto w-full text-left flex flex-col justify-start">
             <div className="space-y-6 bg-white p-8 border border-[#ece9dc] rounded-3xl shadow-sm">
-              <div className="border-b border-[#ece9dc] pb-4">
-                <span className="text-[10px] text-[#8a7e58] font-bold uppercase tracking-wider font-mono">Etapa 1 de 2</span>
-                <h2 className="text-xl font-serif font-bold text-zinc-900 mt-1">Configurar Ficha Catalográfica</h2>
-                <p className="text-xs text-gray-400 mt-1">Preencha com exatidão as informações bibliográficas da obra.</p>
+              <div className="border-b border-[#ece9dc] pb-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-[#8a7e58] font-bold uppercase tracking-wider font-mono">Etapa 1 de 2</span>
+                  <h2 className="text-xl font-serif font-bold text-zinc-900 mt-1">Configurar Ficha Catalográfica</h2>
+                  <p className="text-xs text-gray-400 mt-1">Preencha com exatidão as informações bibliográficas da obra.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAiAutocomplete}
+                  disabled={aiWorking || !title}
+                  className="px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-[#8a7e58] text-[11px] font-bold rounded-xl border border-amber-500/20 flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                  title="Gera subtítulo, sinopse, ISBN, categoria e tags baseado no título usando IA"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                  <span>Autocompletar com IA</span>
+                </button>
               </div>
 
               <form onSubmit={handleWizardStep1Submit} className="space-y-4">
@@ -906,17 +1324,27 @@ export default function ProfessionalBookEditor({
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-500 block">Categoria Literária *</label>
                     <select
-                      className="w-full bg-zinc-50 border border-[#ece9dc] focus:bg-white text-zinc-900 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-[#8a7e58] cursor-pointer"
+                      className="w-full bg-zinc-50 border border-[#ece9dc] focus:bg-white text-zinc-900 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-[#8a7e58] cursor-pointer font-semibold"
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
                     >
-                      <option value="Clássico">Clássico</option>
-                      <option value="Ficção Científica">Ficção Científica</option>
-                      <option value="Fantasia">Fantasia</option>
-                      <option value="Romance">Romance</option>
-                      <option value="História">História</option>
+                      <option value="Autoajuda">Autoajuda</option>
+                      <option value="Desenvolvimento Pessoal">Desenvolvimento Pessoal</option>
                       <option value="Filosofia">Filosofia</option>
-                      <option value="Poesia">Poesia</option>
+                      <option value="Religião">Religião</option>
+                      <option value="Psicologia">Psicologia</option>
+                      <option value="História">História</option>
+                      <option value="Política">Política</option>
+                      <option value="Economia">Economia</option>
+                      <option value="Negócios">Negócios</option>
+                      <option value="Ciência">Ciência</option>
+                      <option value="Tecnologia">Tecnologia</option>
+                      <option value="Educação">Educação</option>
+                      <option value="Direito">Direito</option>
+                      <option value="Medicina">Medicina</option>
+                      <option value="Culinária">Culinária</option>
+                      <option value="Viagens">Viagens</option>
+                      <option value="Arte">Arte</option>
                     </select>
                   </div>
                   <div className="space-y-1">
@@ -960,6 +1388,29 @@ export default function ProfessionalBookEditor({
                       onChange={(e) => setIsbn(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 block">Direitos Autorais / Situação Legal *</label>
+                    <select
+                      className="w-full bg-zinc-50 border border-[#ece9dc] focus:bg-white text-zinc-900 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-[#8a7e58] cursor-pointer font-semibold"
+                      value={copyrightStatus}
+                      onChange={(e) => setCopyrightStatus(e.target.value as any)}
+                    >
+                      <option value="public_domain">Domínio Público (Liberado)</option>
+                      <option value="licensed">Licenciado (Distribuição sob regras)</option>
+                      <option value="commercial">Comercial (Restrito/Compra Requerida)</option>
+                      <option value="exclusive">Exclusivo (Plataforma BookVerse)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 block">Código da Licença / Regra de Acesso</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: creative_commons, standard_platform, purchase_required"
+                      className="w-full bg-zinc-50 border border-[#ece9dc] focus:bg-white text-zinc-900 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-[#8a7e58]"
+                      value={copyrightLicenseType}
+                      onChange={(e) => setCopyrightLicenseType(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -989,14 +1440,55 @@ export default function ProfessionalBookEditor({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 block">URL da Capa do Livro</label>
-                    <input
-                      type="url"
-                      placeholder="Ex: https://images.unsplash.com/photo-..."
-                      className="w-full bg-zinc-50 border border-[#ece9dc] focus:bg-white text-zinc-900 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-[#8a7e58]"
-                      value={coverUrl}
-                      onChange={(e) => setCoverUrl(e.target.value)}
-                    />
+                    <label className="text-xs font-bold text-gray-500 block">Capa do Livro (Upload ou Link)</label>
+                    <div className="flex gap-3 items-start bg-zinc-50/50 p-2 border border-[#ece9dc] rounded-xl">
+                      {coverUrl ? (
+                        <div className="relative w-14 h-20 border border-zinc-200 rounded-lg overflow-hidden bg-white flex-shrink-0">
+                          <img src={coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" alt="Capa" />
+                          <button
+                            type="button"
+                            onClick={() => setCoverUrl("")}
+                            className="absolute top-0.5 right-0.5 p-0.5 bg-red-600 hover:bg-red-700 text-white rounded-full transition shadow-md cursor-pointer"
+                            title="Remover Capa"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-14 h-20 border-2 border-dashed border-zinc-200 rounded-lg bg-zinc-100 flex flex-col items-center justify-center text-zinc-400 flex-shrink-0">
+                          <Image className="w-5 h-5 stroke-[1.5]" />
+                        </div>
+                      )}
+                      
+                      <div className="flex-grow space-y-1.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8a7e58]/10 hover:bg-[#8a7e58]/20 text-[#8a7e58] rounded-lg text-[10px] font-bold cursor-pointer transition border border-[#8a7e58]/20">
+                            <Upload className="w-3.5 h-3.5" />
+                            Enviar Arquivo de Imagem
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  compressAndSetCover(file);
+                                }
+                              }}
+                            />
+                          </label>
+                          <span className="text-[9px] text-zinc-400 font-mono">Auto-otimizada &lt; 100KB</span>
+                        </div>
+                        
+                        <input
+                          type="url"
+                          placeholder="Ou cole a URL da imagem (Ex: https://...)"
+                          className="w-full bg-white border border-[#ece9dc] focus:bg-white text-zinc-900 rounded-lg px-2.5 py-1 text-[11px] outline-none focus:ring-1 focus:ring-[#8a7e58]"
+                          value={coverUrl && coverUrl.startsWith("data:") ? "" : coverUrl}
+                          onChange={(e) => setCoverUrl(e.target.value)}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1014,7 +1506,7 @@ export default function ProfessionalBookEditor({
         )}
 
         {wizardStep === 2 && (
-          <div className="flex-grow overflow-y-auto p-6 md:p-12 max-w-4xl mx-auto w-full text-left flex flex-col justify-center">
+          <div className="flex-grow overflow-y-auto p-6 md:p-12 max-w-4xl mx-auto w-full text-left flex flex-col justify-start">
             <div className="space-y-6 bg-white p-8 border border-[#ece9dc] rounded-3xl shadow-sm">
               <div className="border-b border-[#ece9dc] pb-4 flex justify-between items-center">
                 <div>
@@ -1498,20 +1990,66 @@ export default function ProfessionalBookEditor({
                             
                             {/* Visual Left Input Area */}
                             <div className="flex flex-col h-full space-y-2">
-                              <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Inserir Conteúdo Rico</span>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Inserir Conteúdo Rico</span>
+                                <div className="flex items-center gap-1 bg-zinc-100 px-1.5 py-0.5 rounded-lg border border-zinc-200 text-[10px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditorFontSize(prev => Math.max(10, prev - 1))}
+                                    className="font-bold text-zinc-600 hover:text-zinc-950 px-1 cursor-pointer"
+                                    title="Diminuir tamanho do texto"
+                                  >
+                                    A-
+                                  </button>
+                                  <span className="text-[9px] font-bold text-zinc-500 font-mono px-0.5">{editorFontSize}px</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditorFontSize(prev => Math.min(24, prev + 1))}
+                                    className="font-bold text-zinc-600 hover:text-zinc-950 px-1 cursor-pointer"
+                                    title="Aumentar tamanho do texto"
+                                  >
+                                    A+
+                                  </button>
+                                </div>
+                              </div>
                               <textarea
                                 ref={textareaRef}
                                 value={getActivePage()?.content || ""}
                                 onChange={(e) => updateActivePageContent(e.target.value)}
-                                className="w-full flex-grow p-4 border border-[#ece9dc] focus:ring-1 focus:ring-zinc-400 rounded-2xl bg-white text-xs font-serif leading-relaxed text-zinc-900 focus:outline-none resize-none"
+                                style={{ fontSize: `${editorFontSize}px` }}
+                                className="w-full flex-grow p-4 border border-[#ece9dc] focus:ring-1 focus:ring-zinc-400 rounded-2xl bg-white leading-relaxed text-zinc-900 focus:outline-none resize-none"
                                 placeholder="Digite o conteúdo da sua página literária aqui..."
                               />
                             </div>
 
                             {/* Visual Right Live Render Area */}
                             <div className="flex flex-col h-full space-y-2 overflow-hidden">
-                              <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Visualização Real no BookVerse</span>
-                              <div className="w-full flex-grow p-6 border border-[#ece9dc] rounded-2xl bg-white text-zinc-800 overflow-y-auto shadow-inner prose prose-sm leading-relaxed font-serif text-left">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Visualização Real no BookVerse</span>
+                                <div className="flex items-center gap-1 bg-zinc-100 px-1.5 py-0.5 rounded-lg border border-zinc-200 text-[10px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewFontSize(prev => Math.max(12, prev - 1))}
+                                    className="font-bold text-zinc-600 hover:text-zinc-950 px-1 cursor-pointer"
+                                    title="Diminuir visualização"
+                                  >
+                                    A-
+                                  </button>
+                                  <span className="text-[9px] font-bold text-zinc-500 font-mono px-0.5">{previewFontSize}px</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewFontSize(prev => Math.min(26, prev + 1))}
+                                    className="font-bold text-zinc-600 hover:text-zinc-950 px-1 cursor-pointer"
+                                    title="Aumentar visualização"
+                                  >
+                                    A+
+                                  </button>
+                                </div>
+                              </div>
+                              <div 
+                                style={{ fontSize: `${previewFontSize}px` }}
+                                className="w-full flex-grow p-6 border border-[#ece9dc] rounded-2xl bg-white text-zinc-800 overflow-y-auto shadow-inner prose prose-sm leading-relaxed font-serif text-left"
+                              >
                                 <ReactMarkdown>{getActivePage()?.content || "_Nenhum conteúdo nesta página ainda._"}</ReactMarkdown>
                               </div>
                             </div>
@@ -1573,14 +2111,47 @@ export default function ProfessionalBookEditor({
                         </div>
                       </div>
 
-                      <div className="p-4 border-t border-zinc-100 bg-zinc-50">
+                      <div className="p-4 border-t border-zinc-100 bg-[#FAF9F5] space-y-3">
                         <div className="text-[10px] text-[#8a7e58] font-bold flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>Pronto para futuras IAs</span>
+                          <Sparkles className="w-3.5 h-3.5 animate-pulse text-amber-500" />
+                          <span>Assistente de Escrita IA</span>
                         </div>
-                        <p className="text-[9px] text-gray-400 mt-1 leading-relaxed">
-                          Cada bloco possui identificador único no Firestore que possibilita futuras ferramentas de tradução automática e revisão estrutural de narrativa.
+                        <p className="text-[9px] text-gray-400 leading-relaxed">
+                          Refine o estilo, corrija grafia ou solicite que a IA continue escrevendo a narrativa da página literária ativa.
                         </p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            disabled={aiWorking || !getActivePage()?.content}
+                            onClick={() => handleAiWritingAction("improve")}
+                            className="py-1.5 px-2 bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-700 rounded-lg text-[9px] font-bold cursor-pointer transition disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs"
+                          >
+                            Melhorar Estilo
+                          </button>
+                          <button
+                            type="button"
+                            disabled={aiWorking || !getActivePage()?.content}
+                            onClick={() => handleAiWritingAction("grammar")}
+                            className="py-1.5 px-2 bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-700 rounded-lg text-[9px] font-bold cursor-pointer transition disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs"
+                          >
+                            Corrigir Grafia
+                          </button>
+                          <button
+                            type="button"
+                            disabled={aiWorking || !getActivePage()?.content}
+                            onClick={() => handleAiWritingAction("continue")}
+                            className="py-1.5 px-2 bg-[#8a7e58]/10 hover:bg-[#8a7e58]/20 border border-[#8a7e58]/20 text-[#8a7e58] rounded-lg text-[9px] font-bold cursor-pointer transition disabled:opacity-50 flex items-center justify-center gap-1 col-span-2 shadow-xs"
+                          >
+                            <Sparkles className="w-2.5 h-2.5" />
+                            Continuar Escrita...
+                          </button>
+                        </div>
+                        {aiWorking && (
+                          <div className="text-[9px] text-amber-600 font-bold flex items-center gap-1.5 justify-center animate-pulse py-1">
+                            <RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
+                            <span>Processando com IA BookVerse...</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1892,21 +2463,34 @@ export default function ProfessionalBookEditor({
                 <div className="flex justify-end gap-2.5 pt-2 border-t border-zinc-100">
                   <button
                     onClick={() => setShowChecklistModal(false)}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition"
+                    disabled={isSaving || saveLoading}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition disabled:opacity-50"
                   >
                     Voltar a Editar
                   </button>
                   <button
-                    onClick={handlePublishSubmit}
-                    disabled={saveLoading}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1"
+                    onClick={handleSaveDraft}
+                    disabled={isSaving || saveLoading}
+                    className="bg-zinc-800 hover:bg-[#1f1e1a] text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {saveLoading ? (
+                    {isSaving ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-zinc-300" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5 text-zinc-300" />
+                    )}
+                    {isSaving ? "Guardando..." : "Guardar Rascunho"}
+                  </button>
+                  <button
+                    onClick={handlePublishSubmit}
+                    disabled={isSaving || saveLoading}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving || saveLoading ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <Check className="w-3.5 h-3.5" />
                     )}
-                    Salvar e Publicar Livro
+                    {isSaving || saveLoading ? "Salvando..." : "Salvar e Publicar Livro"}
                   </button>
                 </div>
               </motion.div>

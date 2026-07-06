@@ -131,6 +131,34 @@ export default function BookDetailModal({
                   {hasAudiobook ? "SIM" : "NÃO"}
                 </span>
               </div>
+
+              {/* Copyright Info */}
+              {book.copyright && (
+                <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-xl text-left space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Situação Legal</span>
+                    <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase border ${
+                      book.copyright.status === "public_domain"
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : book.copyright.status === "licensed"
+                        ? "bg-sky-500/10 text-sky-400 border-sky-500/20"
+                        : book.copyright.status === "exclusive"
+                        ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    }`}>
+                      {book.copyright.status === "public_domain" ? "Domínio Público" :
+                       book.copyright.status === "licensed" ? "Licenciado" :
+                       book.copyright.status === "exclusive" ? "Exclusivo" : "Comercial"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
+                    {book.copyright.status === "public_domain" && "Livre de restrições legais para leitura e distribuição."}
+                    {book.copyright.status === "licensed" && `Autorizado para distribuição via licença '${book.copyright.licenseType || "Padrão"}'.`}
+                    {book.copyright.status === "exclusive" && "Conteúdo exclusivo com direitos de publicação reservados ao BookVerse."}
+                    {book.copyright.status === "commercial" && `Direitos autorais de terceiros protegidos (${book.copyright.licenseType || "Venda Comercial"}).`}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

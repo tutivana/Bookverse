@@ -108,6 +108,45 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
 
   const isAdminOrSuper = currentAdmin.role === "Super Administrador" || currentAdmin.role === "Administrador";
 
+  // Helper to map and enrich duplicate pairs returned by backend APIs
+  const mapDuplicatePairs = (rawDuplicates: any[]) => {
+    return (rawDuplicates || []).map((item) => {
+      const b1 = item.book1 || item.bookA || {};
+      const b2 = item.book2 || item.bookB || {};
+      
+      const fullBookA = books.find((b) => b.id === b1.id) || b1;
+      const fullBookB = books.find((b) => b.id === b2.id) || b2;
+      
+      let confidence = 0.9;
+      if (item.confidence !== undefined) {
+        confidence = item.confidence;
+      } else if (item.similarityScore !== undefined) {
+        confidence = item.similarityScore > 1 ? item.similarityScore / 100 : item.similarityScore;
+      }
+      
+      return {
+        ...item,
+        bookA: {
+          id: fullBookA.id || "",
+          title: fullBookA.title || "",
+          author: fullBookA.author || "",
+          coverUrl: fullBookA.coverUrl || "",
+          status: fullBookA.status || "Active"
+        },
+        bookB: {
+          id: fullBookB.id || "",
+          title: fullBookB.title || "",
+          author: fullBookB.author || "",
+          coverUrl: fullBookB.coverUrl || "",
+          status: fullBookB.status || "Active"
+        },
+        confidence,
+        reason: item.reason || "Potencial duplicidade de catálogo",
+        suggestedAction: item.suggestedAction || "manter versão principal"
+      };
+    });
+  };
+
   // Navigation State
   const [activeTab, setActiveTab] = useState<'books' | 'users' | 'reports' | 'logs' | 'dashboard' | 'notifications' | 'ai' | 'saas' | 'rules'>('books');
 
@@ -237,7 +276,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
   // Book Form State
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const [category, setCategory] = useState("Clássico");
+  const [category, setCategory] = useState("Desenvolvimento Pessoal");
   const [description, setDescription] = useState("");
   const [coverUrl, setCoverUrl] = useState("");
   const [language, setLanguage] = useState("Português");
@@ -271,7 +310,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
 
   // Batch Operations State
   const [batchAction, setBatchAction] = useState("");
-  const [batchCategory, setBatchCategory] = useState("Clássico");
+  const [batchCategory, setBatchCategory] = useState("Desenvolvimento Pessoal");
   const [batchLanguage, setBatchLanguage] = useState("Português");
   const [batchReason, setBatchReason] = useState("");
   const [showBatchConfirm, setShowBatchConfirm] = useState(false);
@@ -469,7 +508,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
         }
         try {
           const dups = await adminDetectDuplicates(currentAdmin.id);
-          setDuplicatePairs(dups.duplicates || []);
+          setDuplicatePairs(mapDuplicatePairs(dups.duplicates || []));
         } catch (dupsErr) {
           console.error("Error loading duplicates:", dupsErr);
         }
@@ -522,7 +561,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
     setError("");
     try {
       const res = await adminDetectDuplicates(currentAdmin.id);
-      setDuplicatePairs(res.duplicates || []);
+      setDuplicatePairs(mapDuplicatePairs(res.duplicates || []));
       triggerSuccess(`Varredura concluída. Encontrou ${res.duplicates?.length || 0} potenciais registros duplicados.`);
     } catch (err: any) {
       setError(err.message || "Erro ao detectar registros duplicados.");
@@ -751,7 +790,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
   const resetForm = () => {
     setTitle("");
     setAuthor("");
-    setCategory("Clássico");
+    setCategory("Desenvolvimento Pessoal");
     setDescription("");
     setCoverUrl("");
     setLanguage("Português");
@@ -1473,17 +1512,27 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
 
                     {batchAction === "change-category" && (
                       <select
-                        className="bg-white border border-[#ece9dc] rounded-xl px-3 py-1.5 text-xs outline-none text-gray-900"
+                        className="bg-white border border-[#ece9dc] rounded-xl px-3 py-1.5 text-xs outline-none text-gray-900 font-semibold cursor-pointer"
                         value={batchCategory}
                         onChange={(e) => setBatchCategory(e.target.value)}
                       >
-                        <option value="Clássico">Clássico</option>
-                        <option value="Ficção Científica">Ficção Científica</option>
-                        <option value="Fantasia">Fantasia</option>
-                        <option value="Romance">Romance</option>
-                        <option value="História">História</option>
+                        <option value="Autoajuda">Autoajuda</option>
+                        <option value="Desenvolvimento Pessoal">Desenvolvimento Pessoal</option>
                         <option value="Filosofia">Filosofia</option>
-                        <option value="Poesia">Poesia</option>
+                        <option value="Religião">Religião</option>
+                        <option value="Psicologia">Psicologia</option>
+                        <option value="História">História</option>
+                        <option value="Política">Política</option>
+                        <option value="Economia">Economia</option>
+                        <option value="Negócios">Negócios</option>
+                        <option value="Ciência">Ciência</option>
+                        <option value="Tecnologia">Tecnologia</option>
+                        <option value="Educação">Educação</option>
+                        <option value="Direito">Direito</option>
+                        <option value="Medicina">Medicina</option>
+                        <option value="Culinária">Culinária</option>
+                        <option value="Viagens">Viagens</option>
+                        <option value="Arte">Arte</option>
                       </select>
                     )}
 
@@ -1987,13 +2036,14 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                             <td className="p-4">
                               <select
                                 className="bg-white border border-[#ece9dc] rounded-lg px-2 py-1 text-[11px] outline-none text-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
-                                value={u.role || "Moderador"}
+                                value={u.role || "Leitor"}
                                 disabled={currentAdmin.role !== "Super Administrador"}
                                 onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
                               >
                                 <option value="Super Administrador">Super Administrador</option>
                                 <option value="Administrador">Administrador</option>
                                 <option value="Moderador">Moderador</option>
+                                <option value="Leitor">Leitor</option>
                               </select>
                               {currentAdmin.role !== "Super Administrador" && (
                                 <span className="text-[9px] text-gray-400 block mt-0.5">Apenas Super Admin altera</span>
@@ -3326,7 +3376,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
 
                 <div>
                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Cargo / Permissão</span>
-                  <span className="font-bold text-[#8a7e58] block mt-0.5">{selectedUserDetails.role || "Moderador"}</span>
+                  <span className="font-bold text-[#8a7e58] block mt-0.5">{selectedUserDetails.role || "Leitor"}</span>
                 </div>
 
                 <div>

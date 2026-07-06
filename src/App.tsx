@@ -56,7 +56,31 @@ export default function App() {
   // Check if a book is available to read
   const isBookAvailable = (book: Book | null): boolean => {
     if (!book) return false;
-    return !book.status || book.status === "Active";
+    
+    // First verify admin review status
+    if (book.status && book.status !== "Active") {
+      return false;
+    }
+
+    // Check copyright status and apply access control rules
+    const copyright = book.copyright || { status: "commercial", licenseType: "purchase_required" };
+    
+    // 1. If public domain, allow access
+    if (copyright.status === "public_domain") {
+      return true;
+    }
+    
+    // 2. If licensed, allow access according to standard platform rules (e.g. standard content access)
+    if (copyright.status === "licensed") {
+      return true;
+    }
+
+    // 3. Otherwise (commercial, exclusive), block standard readers. Admins/Super Admins can bypass to preview content.
+    if (user && (user.role === "Super Administrador" || user.role === "Administrador")) {
+      return true;
+    }
+
+    return false;
   };
 
   // Poll notifications
@@ -105,18 +129,28 @@ export default function App() {
   const [editName, setEditName] = useState("");
   const [editAvatar, setEditAvatar] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
+  const [isAdminPortal, setIsAdminPortal] = useState(false);
 
   // Paywall Modal state
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"audiobook" | "offline" | "premium_book" | "stats" | "highlights" | "generic">("generic");
+  const [paywallInterval, setPaywallInterval] = useState<"monthly" | "yearly">("monthly");
 
-  const triggerPaywall = (reason: "audiobook" | "offline" | "premium_book" | "stats" | "highlights" | "generic") => {
+  const triggerPaywall = (
+    reason: "audiobook" | "offline" | "premium_book" | "stats" | "highlights" | "generic",
+    interval: "monthly" | "yearly" = "monthly"
+  ) => {
     setPaywallReason(reason);
+    setPaywallInterval(interval);
     setPaywallOpen(true);
   };
 
   // Load user session on mount
   useEffect(() => {
+    const path = window.location.pathname;
+    const isParamAdmin = path === "/admin" || window.location.hash === "#admin" || window.location.hash === "#/admin";
+    setIsAdminPortal(isParamAdmin);
+
     const savedUser = localStorage.getItem("bookverse_user");
     if (savedUser) {
       try {
@@ -124,17 +158,37 @@ export default function App() {
         setUser(parsed);
         setEditName(parsed.name);
         setEditAvatar(parsed.avatarUrl || "");
-        setCurrentView("library");
+        
+        if (isParamAdmin) {
+          const isAuthorized = parsed.role === "Super Administrador" || parsed.role === "Administrador";
+          if (isAuthorized) {
+            setCurrentView("admin");
+          } else {
+            setCurrentView("library");
+          }
+        } else {
+          setCurrentView("library");
+        }
       } catch (e) {
         console.error("Stale session found", e);
-        setCurrentView("landing");
+        setCurrentView(isParamAdmin ? "auth" : "landing");
       }
     } else {
       setUser(null);
-      setCurrentView("landing");
+      setCurrentView(isParamAdmin ? "auth" : "landing");
     }
     setLoading(false);
   }, []);
+
+  // Middleware de proteção para a tela Admin
+  useEffect(() => {
+    if (currentView === "admin") {
+      const isAuthorized = user && (user.role === "Super Administrador" || user.role === "Administrador");
+      if (!isAuthorized) {
+        setCurrentView("library");
+      }
+    }
+  }, [currentView, user]);
 
   // Fetch catalog, progress, and statistics whenever the active user changes
   const loadUserData = async () => {
@@ -203,14 +257,24 @@ export default function App() {
     setEditName(authenticatedUser.name);
     setEditAvatar(authenticatedUser.avatarUrl || "");
     localStorage.setItem("bookverse_user", JSON.stringify(authenticatedUser));
-    setCurrentView("library");
+    
+    if (isAdminPortal) {
+      const isAuthorized = authenticatedUser.role === "Super Administrador" || authenticatedUser.role === "Administrador";
+      if (isAuthorized) {
+        setCurrentView("admin");
+      } else {
+        setCurrentView("library");
+      }
+    } else {
+      setCurrentView("library");
+    }
   };
 
   const handleLogout = () => {
     localStorage.removeItem("bookverse_user");
     setUser(null);
     setActiveBook(null);
-    setCurrentView("landing");
+    setCurrentView(isAdminPortal ? "auth" : "landing");
   };
 
   const handleToggleFavorite = async (bookId: string) => {
@@ -321,16 +385,19 @@ export default function App() {
             onToggleFavorite={() => {
               setSelectedGuestBook(null);
               setAuthMode("login");
+              setIsAdminPortal(false);
               setCurrentView("auth");
             }}
             onSelectBook={() => {
               setSelectedGuestBook(null);
               setAuthMode("login");
+              setIsAdminPortal(false);
               setCurrentView("auth");
             }}
             onTriggerAuth={(mode) => {
               setSelectedGuestBook(null);
               setAuthMode(mode);
+              setIsAdminPortal(false);
               setCurrentView("auth");
             }}
           />
@@ -344,6 +411,7 @@ export default function App() {
       <AuthScreen
         onAuthSuccess={handleAuthSuccess}
         defaultIsLogin={authMode === "login"}
+        isAdminPortal={isAdminPortal}
         onBackToLanding={() => {
           setCurrentView("landing");
         }}
@@ -437,7 +505,7 @@ export default function App() {
             )}
 
             {/* Separator and Admin Area Link */}
-            {user && (user.role === "Super Administrador" || user.role === "Administrador" || user.role === "Moderador") && (
+            {user && (user.role === "Super Administrador" || user.role === "Administrador") && (
               <>
                 <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0 self-center" />
                 <button
@@ -523,6 +591,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     setAuthMode("login");
+                    setIsAdminPortal(false);
                     setCurrentView("auth");
                   }}
                   className="text-xs font-bold text-zinc-400 hover:text-[#e2b874] transition px-3 py-2 cursor-pointer"
@@ -532,6 +601,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     setAuthMode("register");
+                    setIsAdminPortal(false);
                     setCurrentView("auth");
                   }}
                   className="bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold text-xs px-4 py-2 rounded-xl transition active:scale-95 cursor-pointer shadow-md"
@@ -621,7 +691,7 @@ export default function App() {
               />
             )}
 
-            {currentView === "admin" && (
+            {currentView === "admin" && user && (user.role === "Super Administrador" || user.role === "Administrador") && (
               <AdminPanel
                 books={books}
                 onBackToLibrary={() => setCurrentView("library")}
@@ -642,6 +712,7 @@ export default function App() {
                 onLogout={handleLogout}
                 onViewChange={(view) => setCurrentView(view)}
                 onSelectBook={handleSelectBook}
+                onTriggerPaywall={triggerPaywall}
               />
             )}
           </motion.div>
@@ -668,7 +739,11 @@ export default function App() {
               } else if (destinationLink === "library") {
                 setCurrentView("library");
               } else if (destinationLink === "admin") {
-                setCurrentView("admin");
+                if (user && (user.role === "Super Administrador" || user.role === "Administrador")) {
+                  setCurrentView("admin");
+                } else {
+                  setCurrentView("library");
+                }
               }
             }}
             onUpdateCount={(count) => {
@@ -678,13 +753,28 @@ export default function App() {
 
           <PremiumPaywallModal
             isOpen={paywallOpen}
-            onClose={() => setPaywallOpen(false)}
+            onClose={async () => {
+              setPaywallOpen(false);
+              if (user && user.id) {
+                try {
+                  const r = await fetch(`/api/auth/me/${user.id}`);
+                  const d = await r.json();
+                  if (d.user) {
+                    setUser(d.user);
+                    localStorage.setItem("bookverse_user", JSON.stringify(d.user));
+                  }
+                } catch (e) {
+                  console.error("Failed to sync user state on paywall modal close", e);
+                }
+              }
+            }}
             userId={user.id}
             onSuccess={(updatedUser) => {
               setUser(updatedUser);
               localStorage.setItem("bookverse_user", JSON.stringify(updatedUser));
             }}
             initialReason={paywallReason}
+            initialInterval={paywallInterval}
           />
         </>
       )}

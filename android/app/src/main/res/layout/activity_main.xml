@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/black_bg"
+    android:padding="16dp">
+
+    <!-- Header area -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/txtWelcome"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Olá, Tuto José!"
+                android:textColor="@color/zinc_100"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtUserRole"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Perfil: Super Administrador"
+                android:textColor="@color/gold_amber"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLogout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sair"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:textColor="@color/red_500" />
+    </LinearLayout>
+
+    <!-- Admin shortcut banner (Strictly role-conditioned in Java!) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnAdminPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="PAINEL ADMINISTRATIVO"
+        android:textColor="@color/zinc_100"
+        app:backgroundTint="@color/orange_admin"
+        app:icon="@android:drawable/ic_menu_manage"
+        android:layout_marginBottom="16dp"
+        android:padding="12dp"
+        android:visibility="gone" />
+
+    <!-- Section Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Catálogo de Obras"
+        android:textColor="@color/zinc_100"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Grid list of books -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerViewBooks"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Support feedback ticket row -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSupport"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Contatar Suporte / Enviar Feedback"
+        android:textColor="@color/black_bg"
+        app:backgroundTint="@color/gold_amber"
+        style="@style/Widget.Material3.Button"
+        android:padding="14dp" />
+
+</LinearLayout>

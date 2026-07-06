@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black_bg">#09090b</color>
+    <color name="card_bg">#121214</color>
+    <color name="zinc_800">#27272a</color>
+    <color name="zinc_400">#a1a1aa</color>
+    <color name="zinc_100">#f4f4f5</color>
+    <color name="gold_amber">#e2b874</color>
+    <color name="gold_hover">#c59e5f</color>
+    <color name="orange_admin">#f97316</color>
+    <color name="emerald_500">#10b981</color>
+    <color name="red_500">#ef4444</color>
+</resources>

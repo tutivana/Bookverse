@@ -36,7 +36,8 @@ import {
   Laptop,
   Check,
   ChevronRight,
-  Info
+  Info,
+  HelpCircle
 } from "lucide-react";
 import {
   updateUserProfile,
@@ -56,10 +57,12 @@ interface UserProfileProps {
   onLogout: () => void;
   onViewChange: (view: "library" | "reader" | "audiobook" | "stats" | "admin" | "profile") => void;
   onSelectBook: (book: Book, startInAudioMode: boolean) => void;
+  onTriggerPaywall?: (reason: "audiobook" | "offline" | "premium_book" | "stats" | "highlights" | "generic", interval?: "monthly" | "yearly") => void;
 }
 
 import NotificationSettings from "./NotificationSettings";
 import OfflineManager from "./OfflineManager";
+import ContactSupportModal from "./ContactSupportModal";
 
 type ProfileTab = "profile" | "settings" | "security" | "privacy" | "notifications" | "offline" | "billing";
 
@@ -74,6 +77,7 @@ export default function UserProfile({
   onLogout,
   onViewChange,
   onSelectBook,
+  onTriggerPaywall,
 }: UserProfileProps) {
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
 
@@ -128,6 +132,7 @@ export default function UserProfile({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteEmailConfirm, setDeleteEmailConfirm] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   // Loading Reviews and Notes on mount
   useEffect(() => {
@@ -161,7 +166,7 @@ export default function UserProfile({
         .catch((err) => console.error("Error loading user premium requests:", err))
         .finally(() => setBillingLoading(false));
     }
-  }, [activeTab, user.id]);
+  }, [activeTab, user.id, user]);
 
   // Handle saving personal info / account settings
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -437,7 +442,14 @@ export default function UserProfile({
             </button>
           ))}
 
-          <div className="pt-4 mt-4 border-t border-zinc-800/60">
+          <div className="pt-4 mt-4 border-t border-zinc-800/60 space-y-2">
+            <button
+              onClick={() => setIsSupportOpen(true)}
+              className="w-full text-left py-3 px-4 rounded-xl text-xs font-bold text-amber-400 hover:bg-amber-950/10 hover:text-amber-300 transition flex items-center gap-3 cursor-pointer"
+            >
+              <HelpCircle className="w-4 h-4 text-amber-500/80" />
+              Fale com o Suporte
+            </button>
             <button
               onClick={() => setShowLogoutConfirm(true)}
               className="w-full text-left py-3 px-4 rounded-xl text-xs font-bold text-red-400 hover:bg-red-950/20 transition flex items-center gap-3 cursor-pointer"
@@ -1323,38 +1335,14 @@ export default function UserProfile({
                         </div>
 
                         <button
-                          disabled={billingLoading}
-                          onClick={async () => {
-                            setBillingLoading(true);
-                            setBillingSuccess("");
-                            setBillingError("");
-                            try {
-                              const res = await fetch("/api/billing/request-upgrade", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ userId: user.id, billingInterval: requestIntervalSetting })
-                              });
-                              const data = await res.json();
-                              if (data.success) {
-                                setBillingSuccess(data.message);
-                                // Refresh requests
-                                const reqRes = await fetch(`/api/billing/requests/${user.id}`);
-                                const reqData = await reqRes.json();
-                                if (reqData.success) {
-                                  setBillingRequests(reqData.requests || []);
-                                }
-                              } else {
-                                setBillingError(data.error || "Erro ao solicitar upgrade.");
-                              }
-                            } catch (err) {
-                              setBillingError("Erro de conexão ao enviar solicitação.");
-                            } finally {
-                              setBillingLoading(false);
+                          onClick={() => {
+                            if (onTriggerPaywall) {
+                              onTriggerPaywall("generic", requestIntervalSetting);
                             }
                           }}
                           className="mt-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-zinc-950 font-bold text-xs rounded-xl shadow-lg transition duration-200 cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          {billingLoading ? "Processando..." : "Solicitar Plano Premium"}
+                          Solicitar Plano Premium
                         </button>
                       </div>
                     </div>
@@ -1509,6 +1497,13 @@ export default function UserProfile({
           </div>
         )}
       </AnimatePresence>
+
+      {/* MODAL 3: Contact Support */}
+      <ContactSupportModal
+        isOpen={isSupportOpen}
+        onClose={() => setIsSupportOpen(false)}
+        user={user}
+      />
     </div>
   );
 }

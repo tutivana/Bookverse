@@ -12,6 +12,28 @@ export default function UnavailableBookScreen({ book, onBackToLibrary }: Unavail
   const status = book.status || "Active";
 
   const getStatusDetails = () => {
+    const copyright = book.copyright;
+    const isCopyrightRestricted = copyright && copyright.status !== "public_domain" && copyright.status !== "licensed";
+
+    if (isCopyrightRestricted) {
+      return {
+        icon: <ShieldAlert className="w-12 h-12 text-rose-500 animate-pulse" />,
+        title: "Restrição de Direitos Autorais",
+        message: "A leitura desta obra foi bloqueada devido a restrições de direitos autorais e de distribuição comercial.",
+        subMessage: `Situação Legal: ${
+          copyright.status === "exclusive" ? "EXCLUSIVO DA PLATAFORMA" : "COMERCIAL"
+        } (${copyright.licenseType || "purchase_required"}). Este conteúdo não está licenciado para acesso geral na sua região ou conta.`,
+        buttons: [
+          {
+            label: "Voltar ao catálogo",
+            onClick: onBackToLibrary,
+            variant: "primary",
+            icon: <ArrowLeft className="w-4 h-4" />,
+          },
+        ],
+      };
+    }
+
     switch (status) {
       case "Pending Review":
         return {

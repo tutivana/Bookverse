@@ -1,5 +1,5 @@
 export type UserStatus = "Active" | "Blocked";
-export type UserRole = "Super Administrador" | "Administrador" | "Moderador";
+export type UserRole = "Super Administrador" | "Administrador" | "Moderador" | "Leitor";
 
 export interface UserActivity {
   action: string;
@@ -120,6 +120,10 @@ export interface Book {
   lastReadAt?: string;
   history?: BookHistory[];
   aiAnalysis?: BookAIAnalysis;
+  copyright?: {
+    status: "public_domain" | "licensed" | "commercial" | "exclusive";
+    licenseType: string;
+  };
 }
 
 export interface BookAIAnalysis {
