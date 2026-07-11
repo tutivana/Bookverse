@@ -37,6 +37,22 @@ if (fs.existsSync(configPath)) {
   console.warn("[Firebase init Warning] firebase-applet-config.json not found.");
 }
 
+const DEFAULT_TIMEOUT_MS = 3000;
+
+export function withTimeout<T>(promise: Promise<T>, ms = DEFAULT_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Firestore operation timed out after ${ms}ms`));
+      }, ms);
+      if (timer && typeof timer.unref === "function") {
+        timer.unref();
+      }
+    })
+  ]);
+}
+
 /**
  * Loads database collections from Firestore subcollections and individual documents.
  * If Firestore has no documents, returns null (so we can fall back to local seed data).
@@ -79,7 +95,7 @@ export async function pullFromFirestore(): Promise<any> {
     };
 
     // 1. Fetch Users
-    const usersSnap = await getDocs(collection(firestoreDb, "users"));
+    const usersSnap = await withTimeout(getDocs(collection(firestoreDb, "users")));
     if (!usersSnap.empty) {
       foundAny = true;
       const rawUsers = usersSnap.docs.map(docSnap => {
@@ -97,7 +113,7 @@ export async function pullFromFirestore(): Promise<any> {
     }
 
     // 2. Fetch Books
-    const booksSnap = await getDocs(collection(firestoreDb, "books"));
+    const booksSnap = await withTimeout(getDocs(collection(firestoreDb, "books")));
     if (!booksSnap.empty) {
       foundAny = true;
       const rawBooks = booksSnap.docs.map(docSnap => {
@@ -115,28 +131,28 @@ export async function pullFromFirestore(): Promise<any> {
     }
 
     // 3. Fetch Reports (from root collection)
-    const reportsSnap = await getDocs(collection(firestoreDb, "reports"));
+    const reportsSnap = await withTimeout(getDocs(collection(firestoreDb, "reports")));
     if (!reportsSnap.empty) {
       foundAny = true;
       loadedData.reports = uniqueById(reportsSnap.docs.map(docSnap => docSnap.data()));
     }
 
     // 4. Fetch Logs (from root collection)
-    const logsSnap = await getDocs(collection(firestoreDb, "logs"));
+    const logsSnap = await withTimeout(getDocs(collection(firestoreDb, "logs")));
     if (!logsSnap.empty) {
       foundAny = true;
       loadedData.logs = uniqueById(logsSnap.docs.map(docSnap => docSnap.data()));
     }
 
     // 5. Fetch Premium Requests (from root collection)
-    const reqsSnap = await getDocs(collection(firestoreDb, "premiumRequests"));
+    const reqsSnap = await withTimeout(getDocs(collection(firestoreDb, "premiumRequests")));
     if (!reqsSnap.empty) {
       foundAny = true;
       loadedData.premiumRequests = uniqueById(reqsSnap.docs.map(docSnap => docSnap.data()));
     }
 
     // 6. Fetch Settings (from settings/app)
-    const settingsAppDoc = await getDoc(doc(firestoreDb, "settings", "app"));
+    const settingsAppDoc = await withTimeout(getDoc(doc(firestoreDb, "settings", "app")));
     if (settingsAppDoc.exists()) {
       foundAny = true;
       const sData = settingsAppDoc.data();
@@ -144,12 +160,12 @@ export async function pullFromFirestore(): Promise<any> {
       loadedData.aiEnabled = sData.aiEnabled !== undefined ? sData.aiEnabled : true;
     } else {
       // Fallbacks to legacy/prices documents
-      const pricesDoc = await getDoc(doc(firestoreDb, "settings", "prices"));
+      const pricesDoc = await withTimeout(getDoc(doc(firestoreDb, "settings", "prices")));
       if (pricesDoc.exists()) {
         foundAny = true;
         loadedData.subscriptionPrices = pricesDoc.data().subscriptionPrices || { monthly: 9.99, yearly: 89.99 };
       }
-      const globalDoc = await getDoc(doc(firestoreDb, "settings", "global"));
+      const globalDoc = await withTimeout(getDoc(doc(firestoreDb, "settings", "global")));
       if (globalDoc.exists()) {
         foundAny = true;
         loadedData.aiEnabled = globalDoc.data().aiEnabled !== undefined ? globalDoc.data().aiEnabled : true;
@@ -168,7 +184,7 @@ export async function pullFromFirestore(): Promise<any> {
     ];
 
     for (const sub of subcollections) {
-      const snap = await getDocs(collectionGroup(firestoreDb, sub.name));
+      const snap = await withTimeout(getDocs(collectionGroup(firestoreDb, sub.name)));
       if (!snap.empty) {
         foundAny = true;
         const rawItems = snap.docs.map(docSnap => docSnap.data());
@@ -178,7 +194,7 @@ export async function pullFromFirestore(): Promise<any> {
 
     // Fallback for reports group
     if (loadedData.reports.length === 0) {
-      const repsGroupSnap = await getDocs(collectionGroup(firestoreDb, "reports"));
+      const repsGroupSnap = await withTimeout(getDocs(collectionGroup(firestoreDb, "reports")));
       if (!repsGroupSnap.empty) {
         loadedData.reports = uniqueById(repsGroupSnap.docs.map(docSnap => docSnap.data()));
       }

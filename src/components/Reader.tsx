@@ -628,18 +628,86 @@ export default function Reader({
                           theme === "escuro" ? "border-zinc-800" : theme === "sepia" ? "border-[#ebdcb3]" : "border-gray-200"
                         }`} />
                       ),
-                      a: ({ children, href }) => (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`underline transition-colors hover:opacity-80 font-medium ${
-                            theme === "escuro" ? "text-[#e2b874]" : theme === "sepia" ? "text-[#8a7e58]" : "text-blue-600"
-                          }`}
-                        >
-                          {children}
-                        </a>
-                      ),
+                      a: ({ children, href }) => {
+                        const isInternal = href?.startsWith("#");
+                        const handleLinkClick = (e: React.MouseEvent) => {
+                          if (isInternal && href) {
+                            e.preventDefault();
+                            const hash = href.substring(1); // remove '#'
+                            
+                            // 1. Try to match as page number
+                            const pageMatch = hash.match(/^p(?:agina)?-?(\d+)$/i) || hash.match(/^(\d+)$/);
+                            if (pageMatch) {
+                              const pageNum = parseInt(pageMatch[1], 10);
+                              if (!isNaN(pageNum) && pageNum > 0 && pageNum <= book.pdfContent.length) {
+                                handlePageChange(pageNum - 1);
+                                return;
+                              }
+                            }
+                            
+                            // Helper to slugify
+                            const slugifyText = (text: string) => {
+                              return text
+                                .toLowerCase()
+                                .normalize("NFD")
+                                .replace(/[\u0300-\u036f]/g, "") // remove accents
+                                .replace(/[^a-z0-9\s-]/g, "")
+                                .trim()
+                                .replace(/\s+/g, "-");
+                            };
+
+                            const targetSlug = slugifyText(decodeURIComponent(hash));
+
+                            // 2. Try to match chapter in bookSummary
+                            const summaryIndex = bookSummary.findIndex((item) => {
+                              return slugifyText(item.title) === targetSlug;
+                            });
+
+                            if (summaryIndex !== -1) {
+                              const targetPage = bookSummary[summaryIndex].page;
+                              if (targetPage > 0 && targetPage <= book.pdfContent.length) {
+                                handlePageChange(targetPage - 1);
+                                return;
+                              }
+                            }
+
+                            // 3. Try to search for heading in pages (e.g. lines starting with '#', '##', etc.)
+                            for (let pIdx = 0; pIdx < book.pdfContent.length; pIdx++) {
+                              const lines = book.pdfContent[pIdx].split("\n");
+                              for (const line of lines) {
+                                if (line.trim().startsWith("#")) {
+                                  const titleText = line.replace(/^#+\s+/, "").trim();
+                                  if (slugifyText(titleText) === targetSlug) {
+                                    handlePageChange(pIdx);
+                                    return;
+                                  }
+                                }
+                              }
+                            }
+
+                            // 4. Try generic substring match in pages
+                            for (let pIdx = 0; pIdx < book.pdfContent.length; pIdx++) {
+                              if (book.pdfContent[pIdx].toLowerCase().includes(decodeURIComponent(hash).toLowerCase())) {
+                                handlePageChange(pIdx);
+                                return;
+                              }
+                            }
+                          }
+                        };
+                        return (
+                          <a
+                            href={href}
+                            onClick={handleLinkClick}
+                            target={isInternal ? undefined : "_blank"}
+                            rel={isInternal ? undefined : "noopener noreferrer"}
+                            className={`underline cursor-pointer transition-colors hover:opacity-80 font-medium ${
+                              theme === "escuro" ? "text-[#e2b874]" : theme === "sepia" ? "text-[#8a7e58]" : "text-blue-600"
+                            }`}
+                          >
+                            {children}
+                          </a>
+                        );
+                      },
                       img: ({ src, alt }) => (
                         <img
                           src={src}

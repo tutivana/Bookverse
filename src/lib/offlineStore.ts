@@ -320,3 +320,18 @@ export async function getOfflineReviews(bookId: string): Promise<Review[]> {
     request.onerror = () => reject(request.error);
   });
 }
+
+// 10. Get all full Book objects saved offline
+export async function getDownloadedBooks(): Promise<Book[]> {
+  if (!isStorageSupported()) return [];
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("books", "readonly");
+    const store = tx.objectStore("books");
+    const request = store.getAll();
+    request.onsuccess = () => {
+      resolve(request.result as Book[]);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}

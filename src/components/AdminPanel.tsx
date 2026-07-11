@@ -209,7 +209,17 @@ Isso está na página B.
 ### 3. Ênfases Visuais
 * **Negrito**: \`**palavra**\` para termos de grande destaque.
 * *Itálico*: \`*palavra*\` para diálogos, pensamentos de personagens ou palavras estrangeiras.
-* > Citações em Bloco: Use \`>\` para citações de outros livros ou pensamentos profundos.`,
+* > Citações em Bloco: Use \`>\` para citações de outros livros ou pensamentos profundos.
+
+### 4. Quebras de Linha Manuais (Pular Linhas)
+Caso queira forçar uma quebra de linha simples ou múltipla no texto (adicionando espaçamentos vazios), utilize a tag HTML \`<br />\`:
+* **Pular uma linha**: Insira \`<br />\` ao fim do parágrafo ou linha.
+* **Pular várias linhas**: Insira \`<br /><br />\` consecutivamente.
+
+### 5. Links Internos (Salto para partes do livro)
+Para criar links que realizam saltos interativos dentro do próprio livro:
+* **Para uma página específica**: Use a sintaxe \`[Texto do Link](#p5)\` (substitua 5 pelo número da página desejada).
+* **Para um capítulo ou título**: Use a sintaxe \`[Texto do Link](#nome-do-capitulo)\` (o sistema fará o salto automático para a página correspondente).`,
     conversion: `# ⚙️ Regras de Conversão e Paginação (TXT/EPUB para BookVerse)
 
 Para garantir um tempo de resposta inferior a 200ms no carregamento e renderização fluida no navegador, o texto bruto dos livros deve passar por um algoritmo de normalização e paginação dinâmica.
@@ -338,6 +348,17 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
   // System Logs Tab Filter State
   const [logSearch, setLogSearch] = useState("");
   const [logFilterAction, setLogFilterAction] = useState("Todos");
+  const [logPage, setLogPage] = useState(1);
+  const logsPerPage = 10;
+
+  // Custom confirmation state
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+    confirmText?: string;
+    cancelText?: string;
+  } | null>(null);
 
   // General States
   const [isParsingBookFile, setIsParsingBookFile] = useState(false);
@@ -869,16 +890,21 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
       return;
     }
 
-    const confirmDel = window.confirm(`Deseja REALMENTE excluir permanentemente o livro "${bookTitle}"? Esta ação deletará todos os logs, comentários e progresso de usuários e não poderá ser desfeita.`);
-    if (!confirmDel) return;
-
-    try {
-      await adminDeleteBook(id, currentAdmin.id);
-      triggerSuccess(`Livro "${bookTitle}" removido permanentemente.`);
-      onRefreshBooks();
-    } catch (err: any) {
-      alert(err.message || "Erro ao excluir livro.");
-    }
+    setConfirmAction({
+      title: "Excluir Livro",
+      message: `Deseja REALMENTE excluir permanentemente o livro "${bookTitle}"? Esta ação deletará todos os logs, comentários e progresso de usuários no Firestore e não poderá ser desfeita.`,
+      confirmText: "Excluir permanentemente",
+      cancelText: "Cancelar",
+      onConfirm: async () => {
+        try {
+          await adminDeleteBook(id, currentAdmin.id);
+          triggerSuccess(`Livro "${bookTitle}" removido permanentemente.`);
+          onRefreshBooks();
+        } catch (err: any) {
+          alert(err.message || "Erro ao excluir livro.");
+        }
+      }
+    });
   };
 
   // Single book status update handler
@@ -959,14 +985,22 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
   // User Administration Handlers
   const handleToggleUserBlock = async (user: User) => {
     const nextStatus = user.status === "Blocked" ? "Active" : "Blocked";
-    try {
-      const updated = await adminUpdateUserStatus(user.id, nextStatus, currentAdmin.id);
-      // Update local state
-      setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
-      triggerSuccess(`Usuário ${user.name} está agora ${nextStatus === "Blocked" ? "BLOQUEADO" : "ATIVO"}.`);
-    } catch (err: any) {
-      alert(err.message || "Erro ao alterar bloqueio de usuário");
-    }
+    setConfirmAction({
+      title: nextStatus === "Blocked" ? "Bloquear Usuário" : "Ativar Usuário",
+      message: `Tem certeza que deseja ${nextStatus === "Blocked" ? "bloquear" : "ativar"} o usuário "${user.name}"? Esta ação será registrada no Firestore.`,
+      confirmText: nextStatus === "Blocked" ? "Confirmar Bloqueio" : "Ativar Usuário",
+      cancelText: "Cancelar",
+      onConfirm: async () => {
+        try {
+          const updated = await adminUpdateUserStatus(user.id, nextStatus, currentAdmin.id);
+          // Update local state
+          setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
+          triggerSuccess(`Usuário ${user.name} está agora ${nextStatus === "Blocked" ? "BLOQUEADO" : "ATIVO"}.`);
+        } catch (err: any) {
+          alert(err.message || "Erro ao alterar bloqueio de usuário");
+        }
+      }
+    });
   };
 
   const handleUpdateUserRole = async (userId: string, newRole: string) => {
@@ -985,28 +1019,50 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
 
   // Report Moderation Handlers
   const handleUpdateReport = async (reportId: string, nextStatus: string) => {
-    try {
-      await adminUpdateReportStatus(reportId, nextStatus, currentAdmin.id);
-      setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: nextStatus as any } : r));
-      triggerSuccess(`Denúncia marcada como "${nextStatus}".`);
-    } catch (err: any) {
-      alert(err.message || "Erro ao atualizar denúncia");
+    const proceedWithUpdate = async () => {
+      try {
+        await adminUpdateReportStatus(reportId, nextStatus, currentAdmin.id);
+        setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: nextStatus as any } : r));
+        triggerSuccess(`Denúncia marcada como "${nextStatus}".`);
+      } catch (err: any) {
+        alert(err.message || "Erro ao atualizar denúncia");
+      }
+    };
+
+    if (nextStatus === "Ignored") {
+      setConfirmAction({
+        title: "Ignorar Denúncia",
+        message: "Tem certeza que deseja ignorar esta denúncia? O status será atualizado para Ignorado no Firestore.",
+        confirmText: "Ignorar Denúncia",
+        cancelText: "Cancelar",
+        onConfirm: proceedWithUpdate
+      });
+    } else {
+      await proceedWithUpdate();
     }
   };
 
   const handleDeactivateBookFromReport = async (report: BookReport) => {
-    try {
-      // 1. Mark report as Resolved
-      await adminUpdateReportStatus(report.id, "Resolved", currentAdmin.id);
-      // 2. Deactivate book
-      await adminUpdateBookStatus(report.bookId, "Inactive", `Desativado devido à denúncia ID ${report.id}: ${report.reason}`, currentAdmin.id);
-      triggerSuccess(`Livro desativado e denúncia resolvida com sucesso!`);
-      // Update lists
-      setReports(prev => prev.map(r => r.id === report.id ? { ...r, status: "Resolved" } : r));
-      onRefreshBooks();
-    } catch (err: any) {
-      alert(err.message || "Erro ao desativar livro a partir de denúncia");
-    }
+    setConfirmAction({
+      title: "Desativar Livro da Denúncia",
+      message: `Tem certeza que deseja desativar permanentemente o livro "${report.bookTitle}" com base nesta denúncia? Esta ação atualizará o status do livro no Firestore para Inativo.`,
+      confirmText: "Desativar Livro",
+      cancelText: "Cancelar",
+      onConfirm: async () => {
+        try {
+          // 1. Mark report as Resolved
+          await adminUpdateReportStatus(report.id, "Resolved", currentAdmin.id);
+          // 2. Deactivate book
+          await adminUpdateBookStatus(report.bookId, "Inactive", `Desativado devido à denúncia ID ${report.id}: ${report.reason}`, currentAdmin.id);
+          triggerSuccess(`Livro desativado e denúncia resolvida com sucesso!`);
+          // Update lists
+          setReports(prev => prev.map(r => r.id === report.id ? { ...r, status: "Resolved" } : r));
+          onRefreshBooks();
+        } catch (err: any) {
+          alert(err.message || "Erro ao desativar livro a partir de denúncia");
+        }
+      }
+    });
   };
 
   const handleModCommentStatus = async (commentId: string, status: "active" | "hidden") => {
@@ -1117,6 +1173,13 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
     const matchesAction = logFilterAction === "Todos" || l.action === logFilterAction;
     return matchesSearch && matchesAction;
   }).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  // Logs pagination
+  const totalFilteredLogs = filteredLogs.length;
+  const totalLogPages = Math.ceil(totalFilteredLogs / logsPerPage) || 1;
+  const safeLogPage = Math.min(logPage, totalLogPages);
+  const logStartIndex = (safeLogPage - 1) * logsPerPage;
+  const paginatedLogs = filteredLogs.slice(logStartIndex, logStartIndex + logsPerPage);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans selection:bg-[#dad5bf]" id="admin-workspace-container">
@@ -1398,9 +1461,42 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                       }}
                     >
                       <option value="Todas">Todas Categorias</option>
-                      {Array.from(new Set(books.map((b) => b.category).filter(Boolean))).map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
+                      {(() => {
+                        const standardCats = [
+                          "Autoajuda",
+                          "Desenvolvimento Pessoal",
+                          "Filosofia",
+                          "Religião",
+                          "Psicologia",
+                          "História",
+                          "Política",
+                          "Economia",
+                          "Negócios",
+                          "Ciência",
+                          "Tecnologia",
+                          "Educação",
+                          "Direito",
+                          "Medicina",
+                          "Culinária",
+                          "Viagens",
+                          "Arte",
+                          "Ficção",
+                          "Romance",
+                          "Poesia",
+                          "Biografia",
+                          "Mistério",
+                          "Drama",
+                          "Aventura",
+                          "Fantasia",
+                          "Ficção Científica",
+                          "Infantil"
+                        ];
+                        const actualCats = books.map((b) => b.category).filter(Boolean);
+                        const allUniqueCats = Array.from(new Set([...standardCats, ...actualCats])).sort((a, b) => a.localeCompare(b, "pt-BR"));
+                        return allUniqueCats.map((cat) => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ));
+                      })()}
                     </select>
                   </div>
 
@@ -1414,9 +1510,14 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                       }}
                     >
                       <option value="Todos">Todos Idiomas</option>
-                      {Array.from(new Set(books.map((b) => b.language).filter(Boolean))).map((lang) => (
-                        <option key={lang} value={lang}>{lang}</option>
-                      ))}
+                      {(() => {
+                        const standardLangs = ["Português", "Inglês", "Espanhol", "Francês", "Italiano", "Alemão"];
+                        const actualLangs = books.map((b) => b.language).filter(Boolean);
+                        const allUniqueLangs = Array.from(new Set([...standardLangs, ...actualLangs])).sort((a, b) => a.localeCompare(b, "pt-BR"));
+                        return allUniqueLangs.map((lang) => (
+                          <option key={lang} value={lang}>{lang}</option>
+                        ));
+                      })()}
                     </select>
                   </div>
 
@@ -2331,33 +2432,40 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                               <button
                                 disabled={!!saasActionLoading}
                                 onClick={async () => {
-                                  if (confirm(`Tem certeza que deseja forçar o cancelamento da assinatura Premium de ${usr.name}? Isso revogará o acesso dele imediatamente.`)) {
-                                    setSaasActionLoading(usr.id);
-                                    try {
-                                      const res = await fetch("/api/admin/billing/force-cancel", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ userId: usr.id, adminId: currentAdmin.id })
-                                      });
-                                      const data = await res.json();
-                                      if (data.success) {
-                                        // refresh
-                                        const reqsRes = await fetch("/api/admin/billing/requests");
-                                        const reqsData = await reqsRes.json();
-                                        if (reqsData.success) {
-                                          setSaasRequests(reqsData.requests || []);
+                                  setConfirmAction({
+                                    title: "Forçar Cancelamento de Assinatura",
+                                    message: `Tem certeza que deseja forçar o cancelamento da assinatura Premium de "${usr.name}"? Isso revogará o acesso dele imediatamente no Firestore.`,
+                                    confirmText: "Sim, Forçar Cancelamento",
+                                    cancelText: "Não, Manter Ativa",
+                                    onConfirm: async () => {
+                                      setSaasActionLoading(usr.id);
+                                      try {
+                                        const res = await fetch("/api/admin/billing/force-cancel", {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ userId: usr.id, adminId: currentAdmin.id })
+                                        });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                          // refresh
+                                          const reqsRes = await fetch("/api/admin/billing/requests");
+                                          const reqsData = await reqsRes.json();
+                                          if (reqsData.success) {
+                                            setSaasRequests(reqsData.requests || []);
+                                          }
+                                          const u = await adminFetchUsers();
+                                          setUsers(u);
+                                          triggerSuccess(`Assinatura de ${usr.name} cancelada com sucesso.`);
+                                        } else {
+                                          alert(data.error || "Erro ao cancelar");
                                         }
-                                        const u = await adminFetchUsers();
-                                        setUsers(u);
-                                      } else {
-                                        alert(data.error || "Erro ao cancelar");
+                                      } catch (err) {
+                                        alert("Erro de conexão");
+                                      } finally {
+                                        setSaasActionLoading(null);
                                       }
-                                    } catch (err) {
-                                      alert("Erro de conexão");
-                                    } finally {
-                                      setSaasActionLoading(null);
                                     }
-                                  }
+                                  });
                                 }}
                                 className="text-xs bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-xl transition font-bold cursor-pointer disabled:opacity-40 animate-none"
                               >
@@ -2658,14 +2766,20 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                       placeholder="Pesquisar logs..."
                       className="w-full bg-white border border-[#ece9dc] rounded-xl pl-9 pr-4 py-2 text-xs outline-none focus:ring-1 focus:ring-[#8a7e58]"
                       value={logSearch}
-                      onChange={(e) => setLogSearch(e.target.value)}
+                      onChange={(e) => {
+                        setLogSearch(e.target.value);
+                        setLogPage(1);
+                      }}
                     />
                   </div>
 
                   <select
                     className="bg-white border border-[#ece9dc] rounded-xl px-3 py-2 text-xs outline-none text-gray-900"
                     value={logFilterAction}
-                    onChange={(e) => setLogFilterAction(e.target.value)}
+                    onChange={(e) => {
+                      setLogFilterAction(e.target.value);
+                      setLogPage(1);
+                    }}
                   >
                     <option value="Todos">Todas Ações</option>
                     <option value="Criação de Livro">Criação de Livro</option>
@@ -2694,7 +2808,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f6f5ee] font-sans">
-                      {filteredLogs.map((l) => (
+                      {paginatedLogs.map((l) => (
                         <tr key={l.id} className="hover:bg-gray-50/50 transition">
                           <td className="p-4 pl-6 text-gray-400 font-mono text-[10px] whitespace-nowrap">
                             {new Date(l.timestamp).toLocaleString("pt-BR")}
@@ -2715,6 +2829,40 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                       ))}
                     </tbody>
                   </table>
+                  {/* Logs Pagination Controls */}
+                  {totalLogPages > 1 && (
+                    <div className="p-4 bg-[#f6f5ee]/20 border-t border-[#ece9dc] flex items-center justify-between">
+                      <div className="text-[11px] text-gray-500">
+                        Mostrando <span className="font-semibold">{logStartIndex + 1}</span> a{" "}
+                        <span className="font-semibold">
+                          {Math.min(logStartIndex + logsPerPage, totalFilteredLogs)}
+                        </span>{" "}
+                        de <span className="font-semibold">{totalFilteredLogs}</span> logs
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setLogPage(prev => Math.max(1, prev - 1))}
+                          disabled={safeLogPage === 1}
+                          className="px-2.5 py-1.5 rounded-lg border border-[#ece9dc] text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-white"
+                        >
+                          Anterior
+                        </button>
+                        <div className="text-xs text-gray-600 px-2">
+                          Página <span className="font-semibold text-gray-900">{safeLogPage}</span> de{" "}
+                          <span className="font-semibold text-gray-900">{totalLogPages}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLogPage(prev => Math.min(prev + 1, totalLogPages))}
+                          disabled={safeLogPage === totalLogPages}
+                          className="px-2.5 py-1.5 rounded-lg border border-[#ece9dc] text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-white"
+                        >
+                          Próximo
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3399,10 +3547,10 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                   <span className="text-gray-400 italic">Nenhum livro favoritado ainda.</span>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto pt-1">
-                    {selectedUserDetails.favorites.map((favId) => {
+                    {selectedUserDetails.favorites.map((favId, fIdx) => {
                       const bookName = books.find(b => b.id === favId)?.title || `Livro ID: ${favId}`;
                       return (
-                        <span key={favId} className="bg-[#f6f5ee] border border-[#dad5bf] text-[#2d291c] px-2 py-0.5 rounded-lg font-bold text-[10px]">
+                        <span key={`${favId}-${fIdx}`} className="bg-[#f6f5ee] border border-[#dad5bf] text-[#2d291c] px-2 py-0.5 rounded-lg font-bold text-[10px]">
                           {bookName}
                         </span>
                       );
@@ -4076,6 +4224,52 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                 </div>
               </div>
             </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Action Confirmation Modal */}
+      <AnimatePresence>
+        {confirmAction && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-sm w-full border border-[#dad5bf] p-6 shadow-2xl relative"
+            >
+              <div className="flex items-center gap-3 text-amber-600 mb-3">
+                <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+                <h3 className="font-serif font-bold text-base text-gray-900 leading-tight">
+                  {confirmAction.title}
+                </h3>
+              </div>
+
+              <p className="text-gray-600 text-xs leading-relaxed mb-6">
+                {confirmAction.message}
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction(null)}
+                  className="px-3.5 py-2 border border-[#ece9dc] text-gray-600 hover:bg-gray-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  {confirmAction.cancelText || "Cancelar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const action = confirmAction.onConfirm;
+                    setConfirmAction(null);
+                    await action();
+                  }}
+                  className="px-3.5 py-2 bg-zinc-800 hover:bg-[#1f1e1a] text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  {confirmAction.confirmText || "Confirmar"}
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>

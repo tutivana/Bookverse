@@ -280,6 +280,30 @@ function readDb(): DatabaseSchema {
       db.premiumRequests = [];
       changed = true;
     }
+    if (!db.reviews) {
+      db.reviews = DEFAULT_DB.reviews || [];
+      changed = true;
+    }
+    if (!db.bookmarks) {
+      db.bookmarks = [];
+      changed = true;
+    }
+    if (!db.notes) {
+      db.notes = [];
+      changed = true;
+    }
+    if (!db.progress) {
+      db.progress = [];
+      changed = true;
+    }
+    if (!db.notifications) {
+      db.notifications = [];
+      changed = true;
+    }
+    if (!db.stats) {
+      db.stats = DEFAULT_DB.stats || [];
+      changed = true;
+    }
 
     // Ensure users have roles and statuses
     if (db.users) {
@@ -1582,6 +1606,10 @@ app.get("/api/progress/:userId/:bookId", (req, res) => {
 
 app.get("/api/progress/:userId", (req, res) => {
   const { userId } = req.params;
+  if (!userId || userId === "undefined" || userId === "null") {
+    res.json([]);
+    return;
+  }
   const db = readDb();
   const progressList = db.progress.filter((p) => p.userId === userId);
   res.json(progressList);
@@ -1590,6 +1618,10 @@ app.get("/api/progress/:userId", (req, res) => {
 // Notifications API
 app.get("/api/notifications/:userId", (req, res) => {
   const { userId } = req.params;
+  if (!userId || userId === "undefined" || userId === "null") {
+    res.json([]);
+    return;
+  }
   const db = readDb();
   if (!db.notifications) db.notifications = [];
   const list = db.notifications.filter((n) => n.userId === userId);
@@ -1825,7 +1857,16 @@ app.post("/api/progress", (req, res) => {
       audioPositionSeconds: audioPositionSeconds || 0,
     };
     db.progress.push(newProgress);
+    if (book) {
+      book.readsCount = (book.readsCount || 0) + 1;
+    }
   } else {
+    const oldProgress = db.progress[progressIndex];
+    if (lastPage !== undefined && lastPage > oldProgress.lastPage) {
+      if (book) {
+        book.readsCount = (book.readsCount || 0) + (lastPage - oldProgress.lastPage);
+      }
+    }
     db.progress[progressIndex] = {
       ...db.progress[progressIndex],
       lastPage: lastPage !== undefined ? lastPage : db.progress[progressIndex].lastPage,
@@ -2915,19 +2956,32 @@ app.get("/api/admin/dashboard", (req, res) => {
   const totalUsers = db.users.length;
   const blockedUsers = db.users.filter(u => u.status === "Blocked").length;
   
-  // Last 30 Days Reads Graph Data
+  // Last 30 Days Reads Graph Data - completely real, calculated from db.progress
   const last30DaysReads = Array.from({ length: 12 }, (_, i) => {
     const date = new Date(Date.now() - (11 - i) * 2 * 24 * 60 * 60 * 1000);
+    const label = date.toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+    
+    // We'll define a 2-day window centered on this point to capture activity
+    const startOfRange = new Date(date.getTime() - 24 * 60 * 60 * 1000);
+    const endOfRange = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+
+    // Filter progress entries that had real activity within this range
+    const matchingProgress = (db.progress || []).filter(p => {
+      if (!p.lastReadAt) return false;
+      const readDate = new Date(p.lastReadAt);
+      return readDate >= startOfRange && readDate <= endOfRange;
+    });
+
     return {
-      name: date.toLocaleDateString("pt-BR", { day: "numeric", month: "short" }),
-      leituras: 15 + Math.floor(Math.sin(i) * 5) + (i * 3) + Math.floor(Math.random() * 4)
+      name: label,
+      leituras: matchingProgress.length
     };
   });
 
   // Popular Categories (readsCount sum)
   const categoryMap: Record<string, number> = {};
   db.books.forEach(b => {
-    categoryMap[b.category] = (categoryMap[b.category] || 0) + (b.readsCount || 10);
+    categoryMap[b.category] = (categoryMap[b.category] || 0) + (b.readsCount || 0);
   });
   const popularCategories = Object.entries(categoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
 
@@ -2965,6 +3019,18 @@ app.get("/api/admin/dashboard", (req, res) => {
 // Reading Stats API
 app.get("/api/stats/:userId", (req, res) => {
   const { userId } = req.params;
+  if (!userId || userId === "undefined" || userId === "null") {
+    res.json({
+      userId: userId || "",
+      readingMinutes: 0,
+      listeningMinutes: 0,
+      booksCompletedCount: 0,
+      booksInProgressCount: 0,
+      pagesReadCount: 0,
+      avgSessionMinutes: 0
+    });
+    return;
+  }
   const db = readDb();
   const stats = db.stats.find((s) => s.userId === userId);
   if (!stats) {
@@ -3983,43 +4049,41 @@ Responda à pergunta do administrador sobre o catálogo. Seja extremamente preci
 
 // Vite & Static file serving integration
 async function startServer() {
-  console.log("[BookVerse Server] Initializing Firebase Cloud Firestore connection...");
-  try {
-    let cloudDb = await pullFromFirestore();
-    if (cloudDb) {
-      let isPartiallyEmpty = false;
-      if (!cloudDb.books || cloudDb.books.length === 0) {
-        console.log("[BookVerse Server] Cloud database pulled, but books list is empty. Merging with INITIAL_BOOKS...");
-        cloudDb.books = INITIAL_BOOKS;
-        isPartiallyEmpty = true;
-      }
-      if (!cloudDb.users || cloudDb.users.length === 0) {
-        cloudDb.users = DEFAULT_DB.users;
-        isPartiallyEmpty = true;
-      }
-      if (!cloudDb.progress || cloudDb.progress.length === 0) cloudDb.progress = DEFAULT_DB.progress;
-      if (!cloudDb.reviews || cloudDb.reviews.length === 0) cloudDb.reviews = DEFAULT_DB.reviews;
-      if (!cloudDb.stats || cloudDb.stats.length === 0) cloudDb.stats = DEFAULT_DB.stats;
-      if (!cloudDb.reports || cloudDb.reports.length === 0) cloudDb.reports = DEFAULT_DB.reports;
-      if (!cloudDb.logs || cloudDb.logs.length === 0) cloudDb.logs = DEFAULT_DB.logs;
-      if (!cloudDb.payments || cloudDb.payments.length === 0) cloudDb.payments = DEFAULT_DB.payments;
+  // Fire-and-forget background synchronization with Cloud Firestore to prevent blocking startup/port binding
+  console.log("[BookVerse Server] Initializing Firebase Cloud Firestore connection in background...");
+  (async () => {
+    try {
+      let cloudDb = await pullFromFirestore();
+      if (cloudDb) {
+        let isPartiallyEmpty = false;
+        if (!cloudDb.books || cloudDb.books.length === 0) {
+          console.log("[BookVerse Server] Cloud database pulled, but books list is empty. Merging with INITIAL_BOOKS...");
+          cloudDb.books = INITIAL_BOOKS;
+          isPartiallyEmpty = true;
+        }
+        if (!cloudDb.users || cloudDb.users.length === 0) {
+          cloudDb.users = DEFAULT_DB.users;
+          isPartiallyEmpty = true;
+        }
+        if (!cloudDb.progress || cloudDb.progress.length === 0) cloudDb.progress = DEFAULT_DB.progress;
+        if (!cloudDb.reviews || cloudDb.reviews.length === 0) cloudDb.reviews = DEFAULT_DB.reviews;
+        if (!cloudDb.stats || cloudDb.stats.length === 0) cloudDb.stats = DEFAULT_DB.stats;
+        if (!cloudDb.reports || cloudDb.reports.length === 0) cloudDb.reports = DEFAULT_DB.reports;
+        if (!cloudDb.logs || cloudDb.logs.length === 0) cloudDb.logs = DEFAULT_DB.logs;
+        if (!cloudDb.payments || cloudDb.payments.length === 0) cloudDb.payments = DEFAULT_DB.payments;
 
-      console.log("[BookVerse Server] Successfully pulled fresh database from Cloud Firestore. Updating local cache...");
-      fs.writeFileSync(DB_FILE, JSON.stringify(cloudDb, null, 2));
-
-      console.log("[BookVerse Server] Initiating migration push to Cloud Firestore to ensure new subcollection structure is populated...");
-      await pushToFirestore(cloudDb);
-      console.log("[BookVerse Server] Migration push completed successfully.");
-    } else {
-      console.log("[BookVerse Server] Cloud Firestore is empty. Seeding cloud database with initial schema...");
-      const localDb = readDb();
-      await pushToFirestore(localDb);
-      console.log("[BookVerse Server] Cloud database successfully seeded with initial/local database state!");
+        console.log("[BookVerse Server] Successfully pulled fresh database from Cloud Firestore. Updating local cache...");
+        fs.writeFileSync(DB_FILE, JSON.stringify(cloudDb, null, 2));
+      } else {
+        console.log("[BookVerse Server] Cloud Firestore is empty. Seeding cloud database with initial schema...");
+        const localDb = readDb();
+        await pushToFirestore(localDb);
+        console.log("[BookVerse Server] Cloud database successfully seeded with initial/local database state!");
+      }
+    } catch (err) {
+      console.error("[BookVerse Server] Error connecting/syncing with Cloud Firestore on startup in background:", err);
     }
-  } catch (err) {
-    console.error("[BookVerse Server] Error connecting/syncing with Cloud Firestore on startup:", err);
-    console.log("[BookVerse Server] Continuing startup with local DB cache...");
-  }
+  })();
 
   // ==========================================
   // AI HELPERS & SUPPORT ENDPOINTS
@@ -4027,17 +4091,19 @@ async function startServer() {
 
   // Endpoint 1: Autocomplete / generate book metadata based on title and author
   app.post("/api/admin/ai/autocomplete-book", async (req, res) => {
-    const { title, author } = req.body;
+    const { title, author, language } = req.body;
     if (!title) {
       res.status(400).json({ error: "O título do livro é obrigatório para autocompletar." });
       return;
     }
 
+    const selectedLanguage = language || "Português";
+
     const fallback = {
       title: title,
       subtitle: "Uma obra literária cativante",
       category: "Clássico",
-      language: "Português",
+      language: selectedLanguage,
       isbn: `978-65-${Math.floor(100000 + Math.random() * 900000)}-0`,
       description: `Este livro apresenta a envolvente narrativa sob a autoria de ${author || "Autor Desconhecido"}. Explora temas profundos da condição humana através de diálogos ricos, personagens complexos e reviravoltas inesquecíveis que prendem o leitor do início ao fim.`,
       keywords: `${title}, literatura, clássico, ${author || "autor"}`,
@@ -4056,12 +4122,13 @@ Dado o título do livro "${title}" e opcionalmente o autor "${author || ""}", ge
   "title": "título principal corrigido ou formatado",
   "subtitle": "um subtítulo poético ou explicativo para o livro",
   "category": "uma destas categorias apenas: Clássico, Ficção Científica, Fantasia, Romance, História, Filosofia, Poesia",
-  "language": "idioma (ex: Português)",
+  "language": "idioma (ex: ${selectedLanguage})",
   "isbn": "um ISBN-13 fictício ou real válido no formato 978-xx-xxx-xxxx-x",
   "description": "uma sinopse cativante e robusta de cerca de 150 a 250 caracteres sem spoilers",
   "keywords": "4 a 6 palavras-chave separadas por vírgula",
   "tags": "3 a 5 tags literárias separadas por vírgula"
 }
+Retorne os metadados gerados estritamente no idioma "${selectedLanguage}".
 Retorne estritamente o JSON válido e nada mais.`;
 
       const response = await ai.models.generateContent({
@@ -4096,17 +4163,19 @@ Retorne estritamente o JSON válido e nada mais.`;
 
   // Endpoint 2: AI Writing Assistant to help enhance/correct/expand content of pages
   app.post("/api/admin/ai/writing-assistant", async (req, res) => {
-    const { content, action, context } = req.body;
+    const { content, action, context, language } = req.body;
     if (!content) {
       res.status(400).json({ error: "O conteúdo de texto é obrigatório." });
       return;
     }
 
+    const selectedLanguage = language || "Português";
+
     const promptMap: Record<string, string> = {
-      improve: "Melhore a expressividade, o vocabulário e a fluidez do texto literário a seguir, mantendo a voz narrativa e o estilo. Retorne o texto modificado formatado em markdown.",
-      grammar: "Corrija estritamente erros de grafia, acentuação, concordância e pontuação do texto literário a seguir. Não altere o estilo ou o conteúdo a menos que seja necessário para a correção gramatical. Retorne apenas o texto corrigido em markdown.",
-      continue: `Continue a escrever a narrativa a partir do ponto onde o texto a seguir parou. Crie um parágrafo envolvente que dê continuidade natural à história. O contexto geral é: ${context || ""}. Retorne o texto a seguir acrescido da continuação.`,
-      summarize: "Crie um resumo curto e sinopse em um parágrafo do conteúdo literário fornecido a seguir, adequado para descrição rápida de capítulo."
+      improve: `Melhore a expressividade, o vocabulário e a fluidez do texto literário a seguir no idioma "${selectedLanguage}", mantendo a voz narrativa e o estilo. Retorne o texto modificado formatado em markdown.`,
+      grammar: `Corrija estritamente erros de grafia, acentuação, concordância e pontuação do texto literário a seguir de acordo com as regras gramaticais do idioma "${selectedLanguage}". Não altere o estilo ou o conteúdo a menos que seja necessário para a correção gramatical. Retorne apenas o texto corrigido em markdown.`,
+      continue: `Continue a escrever a narrativa a partir do ponto onde o texto a seguir parou, redigindo estritamente em "${selectedLanguage}". Crie um parágrafo envolvente que dê continuidade natural à história. O contexto geral é: ${context || ""}. Retorne o texto a seguir acrescido da continuação.`,
+      summarize: `Crie um resumo curto e sinopse em um parágrafo do conteúdo literário fornecido a seguir no idioma "${selectedLanguage}", adequado para descrição rápida de capítulo.`
     };
 
     const instruction = promptMap[action] || promptMap.improve;
@@ -4114,9 +4183,9 @@ Retorne estritamente o JSON válido e nada mais.`;
     if (!ai) {
       let result = content;
       if (action === "improve") {
-        result = `${content}\n\n*(Texto aprimorado por IA: Estilo refinado e riqueza vocabular otimizada.)*`;
+        result = `${content}\n\n*(Texto aprimorado por IA no idioma ${selectedLanguage}: Estilo refinado e riqueza vocabular otimizada.)*`;
       } else if (action === "grammar") {
-        result = `${content}\n\n*(Texto revisado gramaticalmente: Sem erros ortográficos.)*`;
+        result = `${content}\n\n*(Texto revisado gramaticalmente em ${selectedLanguage}: Sem erros ortográficos.)*`;
       } else if (action === "continue") {
         result = `${content}\n\nO vento sobrava suavemente pelas frestas da janela de madeira antiga, como se trouxesse consigo segredos guardados há muito tempo. Sentia-se no ar que a noite ainda guardaria revelações inesperadas.`;
       } else if (action === "summarize") {
@@ -4127,7 +4196,7 @@ Retorne estritamente o JSON válido e nada mais.`;
     }
 
     try {
-      const prompt = `Você é o assistente editorial BookVerse IA.
+      const prompt = `Você é o assistente editorial BookVerse IA especializado no idioma "${selectedLanguage}".
 Instrução: ${instruction}
 
 Texto a ser processado:
@@ -4135,7 +4204,7 @@ Texto a ser processado:
 ${content}
 """
 
-Retorne APENAS o resultado textual processado em formato Markdown válido. Não adicione saudações, observações explicativas fora do texto ou introduções.`;
+Retorne APENAS o resultado textual processado em formato Markdown válido, redigido no idioma "${selectedLanguage}". Não adicione saudações, observações explicativas fora do texto ou introduções.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",

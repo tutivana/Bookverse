@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { Book, User } from "../types";
 import BookReviews from "./BookReviews";
+import OfflineDownloadButton from "./OfflineDownloadButton";
+import { isUserPremium } from "../lib/subscription";
 
 interface BookDetailModalProps {
   isOpen: boolean;
@@ -26,6 +28,7 @@ interface BookDetailModalProps {
   onToggleFavorite: (bookId: string) => void;
   onSelectBook: (book: Book, startInAudioMode: boolean) => void;
   onTriggerAuth: (mode: "login" | "register") => void;
+  onTriggerPaywall?: (reason: "audiobook" | "offline" | "premium_book" | "stats" | "highlights") => void;
 }
 
 export default function BookDetailModal({
@@ -36,7 +39,8 @@ export default function BookDetailModal({
   isFavorite,
   onToggleFavorite,
   onSelectBook,
-  onTriggerAuth
+  onTriggerAuth,
+  onTriggerPaywall
 }: BookDetailModalProps) {
   useEffect(() => {
     if (isOpen) {
@@ -51,6 +55,7 @@ export default function BookDetailModal({
   if (!isOpen || !book) return null;
 
   const hasAudiobook = book.audiobookAvailable;
+  const isPremium = isUserPremium(user);
 
   const handleAction = (audioMode: boolean) => {
     if (!user) {
@@ -216,12 +221,18 @@ export default function BookDetailModal({
                   {hasAudiobook && (
                     <button
                       onClick={() => handleAction(true)}
-                      className="w-full sm:flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 hover:border-zinc-700 text-zinc-100 font-bold text-sm rounded-xl transition duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full sm:flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 hover:border-zinc-700 text-zinc-100 font-bold text-sm rounded-xl transition duration-200 flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Headphones className="w-4 h-4 text-[#e2b874]" />
                       Ouvir Audiobook
                     </button>
                   )}
+                  <OfflineDownloadButton 
+                    book={book} 
+                    isPremium={isPremium} 
+                    onTriggerPaywall={() => onTriggerPaywall?.("offline")} 
+                    variant="large" 
+                  />
                   <button
                     onClick={handleFavClick}
                     className={`w-full sm:w-auto p-3.5 rounded-xl border flex items-center justify-center transition duration-200 cursor-pointer ${

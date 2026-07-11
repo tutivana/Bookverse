@@ -54,9 +54,63 @@ export default function Library({
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedLanguage, setSelectedLanguage] = useState("Todos");
 
-  // Get list of categories and languages
-  const categories = ["Todas", ...Array.from(new Set(books.map((b) => b.category)))];
-  const languages = ["Todos", ...Array.from(new Set(books.map((b) => b.language).filter(Boolean)))];
+  // Complete lists of standard categories and languages
+  const standardCategories = [
+    "Todas",
+    "Autoajuda",
+    "Desenvolvimento Pessoal",
+    "Filosofia",
+    "Religião",
+    "Psicologia",
+    "História",
+    "Política",
+    "Economia",
+    "Negócios",
+    "Ciência",
+    "Tecnologia",
+    "Educação",
+    "Direito",
+    "Medicina",
+    "Culinária",
+    "Viagens",
+    "Arte",
+    "Ficção",
+    "Romance",
+    "Poesia",
+    "Biografia",
+    "Mistério",
+    "Drama",
+    "Aventura",
+    "Fantasia",
+    "Ficção Científica",
+    "Infantil"
+  ];
+  
+  const categories = Array.from(new Set([
+    ...standardCategories,
+    ...books.map((b) => b.category).filter(Boolean)
+  ]));
+
+  const standardLanguages = ["Todos", "Português", "Inglês", "Espanhol", "Francês", "Italiano", "Alemão"];
+  const languages = Array.from(new Set([
+    ...standardLanguages,
+    ...books.map((b) => b.language).filter(Boolean)
+  ]));
+
+  // Count helper functions for active books
+  const getCategoryCount = (cat: string) => {
+    if (cat === "Todas") {
+      return books.filter((b) => b.status === "Active" || !b.status).length;
+    }
+    return books.filter((b) => (b.status === "Active" || !b.status) && b.category === cat).length;
+  };
+
+  const getLanguageCount = (lang: string) => {
+    if (lang === "Todos") {
+      return books.filter((b) => b.status === "Active" || !b.status).length;
+    }
+    return books.filter((b) => (b.status === "Active" || !b.status) && b.language === lang).length;
+  };
 
   // Filter books
   const filteredBooks = books.filter((book) => {
@@ -123,19 +177,29 @@ export default function Library({
         <div>
           <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1.5">Filtrar por Categoria</span>
           <div className="overflow-x-auto whitespace-nowrap scrollbar-none py-1 flex gap-2">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                className={`px-4 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition ${
-                  selectedCategory === cat
-                    ? "bg-[#e2b874] text-zinc-950 border-[#e2b874] font-bold shadow-md shadow-[#e2b874]/10"
-                    : "bg-zinc-900/60 text-zinc-400 border-zinc-850 hover:bg-zinc-800 hover:text-zinc-100"
-                }`}
-                onClick={() => setSelectedCategory(cat)}
-              >
-                {cat}
-              </button>
-            ))}
+            {categories.map((cat) => {
+              const count = getCategoryCount(cat);
+              return (
+                <button
+                  key={cat}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition flex items-center gap-2 ${
+                    selectedCategory === cat
+                      ? "bg-[#e2b874] text-zinc-950 border-[#e2b874] font-bold shadow-md shadow-[#e2b874]/10"
+                      : "bg-[#121214] text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100"
+                  }`}
+                  onClick={() => setSelectedCategory(cat)}
+                >
+                  <span>{cat}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-sans font-medium ${
+                    selectedCategory === cat
+                      ? "bg-zinc-950/20 text-zinc-950"
+                      : "bg-zinc-900 text-zinc-500"
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -143,19 +207,29 @@ export default function Library({
           <div>
             <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1.5">Filtrar por Idioma</span>
             <div className="overflow-x-auto whitespace-nowrap scrollbar-none py-1 flex gap-2">
-              {languages.map((lang) => (
-                <button
-                  key={lang}
-                  className={`px-4 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition ${
-                    selectedLanguage === lang
-                      ? "bg-zinc-100 text-zinc-950 border-zinc-100 font-bold"
-                      : "bg-zinc-900/60 text-[#a1a1aa] border-zinc-850 hover:bg-zinc-800 hover:text-zinc-100"
-                  }`}
-                  onClick={() => setSelectedLanguage(lang)}
-                >
-                  {lang}
-                </button>
-              ))}
+              {languages.map((lang) => {
+                const count = getLanguageCount(lang);
+                return (
+                  <button
+                    key={lang}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition flex items-center gap-2 ${
+                      selectedLanguage === lang
+                        ? "bg-zinc-100 text-zinc-950 border-zinc-100 font-bold"
+                        : "bg-[#121214] text-[#a1a1aa] border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100"
+                    }`}
+                    onClick={() => setSelectedLanguage(lang)}
+                  >
+                    <span>{lang}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-sans font-medium ${
+                      selectedLanguage === lang
+                        ? "bg-zinc-200 text-zinc-950"
+                        : "bg-zinc-900 text-[#71717a]"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -607,6 +681,7 @@ export default function Library({
         onTriggerAuth={(mode) => {
           window.dispatchEvent(new CustomEvent("open-auth", { detail: { mode } }));
         }}
+        onTriggerPaywall={onTriggerPaywall}
       />
     </div>
   );

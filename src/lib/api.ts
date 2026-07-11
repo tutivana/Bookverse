@@ -7,16 +7,47 @@ export async function fetchBooks(search?: string, category?: string): Promise<Bo
   if (search) params.append("search", search);
   if (category) params.append("category", category);
   
-  const res = await fetch(`${BASE_URL}/api/books?${params.toString()}`);
-  if (!res.ok) throw new Error("Erro ao carregar livros");
-  return res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/api/books?${params.toString()}`);
+    if (!res.ok) throw new Error("Erro ao carregar livros");
+    return await res.json();
+  } catch (err) {
+    console.warn("fetchBooks falhou, tentando IndexedDB local:", err);
+    try {
+      const { getDownloadedBooks } = await import("./offlineStore");
+      let localBooks = await getDownloadedBooks();
+      if (search) {
+        const q = search.toLowerCase();
+        localBooks = localBooks.filter(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q));
+      }
+      if (category) {
+        localBooks = localBooks.filter(b => b.category === category);
+      }
+      return localBooks;
+    } catch (dbErr) {
+      console.error("Erro ao ler livros do IndexedDB:", dbErr);
+      return [];
+    }
+  }
 }
 
 export async function fetchBookById(id: string, userId?: string): Promise<Book> {
   const url = userId ? `${BASE_URL}/api/books/${id}?userId=${userId}` : `${BASE_URL}/api/books/${id}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Erro ao carregar detalhes do livro");
-  return res.json();
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Erro ao carregar detalhes do livro");
+    return await res.json();
+  } catch (err) {
+    console.warn("fetchBookById falhou, tentando IndexedDB local:", err);
+    try {
+      const { getBookOffline } = await import("./offlineStore");
+      const localBook = await getBookOffline(id);
+      if (localBook) return localBook;
+    } catch (dbErr) {
+      console.error("Erro ao ler livro do IndexedDB:", dbErr);
+    }
+    throw err;
+  }
 }
 
 export async function fetchUserProgress(userId: string, bookId: string): Promise<ReadingProgress> {
@@ -26,9 +57,23 @@ export async function fetchUserProgress(userId: string, bookId: string): Promise
 }
 
 export async function fetchAllUserProgress(userId: string): Promise<ReadingProgress[]> {
-  const res = await fetch(`${BASE_URL}/api/progress/${userId}`);
-  if (!res.ok) throw new Error("Erro ao carregar lista de progressos");
-  return res.json();
+  if (!userId || userId === "undefined" || userId === "null" || userId.trim() === "") {
+    return [];
+  }
+  try {
+    const res = await fetch(`${BASE_URL}/api/progress/${userId}`);
+    if (!res.ok) throw new Error("Erro ao carregar lista de progressos");
+    return await res.json();
+  } catch (err) {
+    console.warn("fetchAllUserProgress falhou, retornando lista de progressos do IndexedDB:", err);
+    try {
+      const { getPendingProgressList } = await import("./offlineStore");
+      return await getPendingProgressList();
+    } catch (dbErr) {
+      console.error("Erro ao ler progressos do IndexedDB:", dbErr);
+      return [];
+    }
+  }
 }
 
 export async function saveReadingProgress(
@@ -38,13 +83,33 @@ export async function saveReadingProgress(
   audioPositionSeconds?: number,
   readingSeconds?: number
 ): Promise<ReadingProgress> {
-  const res = await fetch(`${BASE_URL}/api/progress`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, bookId, lastPage, audioPositionSeconds, readingSeconds }),
-  });
-  if (!res.ok) throw new Error("Erro ao salvar progresso de leitura");
-  return res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/api/progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, bookId, lastPage, audioPositionSeconds, readingSeconds }),
+    });
+    if (!res.ok) throw new Error("Erro ao salvar progresso de leitura");
+    return await res.json();
+  } catch (err) {
+    console.warn("saveReadingProgress falhou, salvando progresso pendente no IndexedDB:", err);
+    try {
+      const { savePendingProgress } = await import("./offlineStore");
+      const progress: ReadingProgress = {
+        userId,
+        bookId,
+        lastPage,
+        progressPercentage: 0,
+        lastReadAt: new Date().toISOString(),
+        audioPositionSeconds
+      };
+      await savePendingProgress(progress);
+      return progress;
+    } catch (dbErr) {
+      console.error("Erro ao salvar progresso pendente no IndexedDB:", dbErr);
+      throw err;
+    }
+  }
 }
 
 export async function saveAudioListeningTime(userId: string, seconds: number): Promise<ReadingStats> {
@@ -105,22 +170,64 @@ export async function deleteNote(id: string): Promise<boolean> {
 }
 
 export async function fetchReviews(bookId: string): Promise<Review[]> {
+  if (!bookId || bookId === "undefined" || bookId === "null" || bookId.trim() === "") {
+    return [];
+  }
   const res = await fetch(`${BASE_URL}/api/reviews/${bookId}`);
   if (!res.ok) throw new Error("Erro ao carregar avaliações");
   return res.json();
 }
 
 export async function submitReview(userId: string, bookId: string, rating: number | undefined, comment: string): Promise<Review> {
-  const res = await fetch(`${BASE_URL}/api/reviews`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, bookId, rating, comment }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Erro ao enviar comentário/avaliação");
+  try {
+    const res = await fetch(`${BASE_URL}/api/reviews`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, bookId, rating, comment }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Erro ao enviar comentário/avaliação");
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn("submitReview falhou, salvando comentário offline:", err);
+    try {
+      const { savePendingReview } = await import("./offlineStore");
+      let name = "Usuário";
+      let avatar = "";
+      try {
+        const savedUser = localStorage.getItem("bookverse_user");
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          name = parsed.name || "Usuário";
+          avatar = parsed.avatarUrl || "";
+        }
+      } catch (storageErr) {
+        console.error("Erro ao ler usuário do localStorage para comentário offline:", storageErr);
+      }
+
+      const tempReview: Review = {
+        id: "temp_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+        userId,
+        bookId,
+        userName: name,
+        userAvatar: avatar,
+        rating: rating,
+        comment,
+        status: "active",
+        likes: [],
+        reports: [],
+        replies: [],
+        createdAt: new Date().toISOString()
+      };
+      await savePendingReview(tempReview);
+      return tempReview;
+    } catch (dbErr) {
+      console.error("Erro ao salvar comentário pendente no IndexedDB:", dbErr);
+      throw err;
+    }
   }
-  return res.json();
 }
 
 export async function editReview(id: string, userId: string, rating: number | undefined, comment: string): Promise<Review> {
@@ -222,6 +329,17 @@ export async function adminToggleUserCommentBan(userId: string, adminId: string)
 }
 
 export async function fetchUserStats(userId: string): Promise<ReadingStats> {
+  if (!userId || userId === "undefined" || userId === "null" || userId.trim() === "") {
+    return {
+      userId: userId || "",
+      readingMinutes: 0,
+      listeningMinutes: 0,
+      booksCompletedCount: 0,
+      booksInProgressCount: 0,
+      pagesReadCount: 0,
+      avgSessionMinutes: 0
+    };
+  }
   const res = await fetch(`${BASE_URL}/api/stats/${userId}`);
   if (!res.ok) throw new Error("Erro ao carregar estatísticas do usuário");
   return res.json();
@@ -429,6 +547,9 @@ export async function generateGeminiTTS(text: string, voice?: string): Promise<{
 }
 
 export async function fetchNotifications(userId: string): Promise<BookNotification[]> {
+  if (!userId || userId === "undefined" || userId === "null" || userId.trim() === "") {
+    return [];
+  }
   const res = await fetch(`${BASE_URL}/api/notifications/${userId}`);
   if (!res.ok) throw new Error("Erro ao carregar notificações.");
   return res.json();
@@ -631,11 +752,11 @@ export async function adminAiAssistantChat(adminId: string, message: string): Pr
   return res.json();
 }
 
-export async function adminAiAutocompleteBook(title: string, author: string): Promise<any> {
+export async function adminAiAutocompleteBook(title: string, author: string, language?: string): Promise<any> {
   const res = await fetch(`${BASE_URL}/api/admin/ai/autocomplete-book`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, author }),
+    body: JSON.stringify({ title, author, language }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -644,11 +765,11 @@ export async function adminAiAutocompleteBook(title: string, author: string): Pr
   return res.json();
 }
 
-export async function adminAiWritingAssistant(content: string, action: string, context?: string): Promise<{ result: string }> {
+export async function adminAiWritingAssistant(content: string, action: string, context?: string, language?: string): Promise<{ result: string }> {
   const res = await fetch(`${BASE_URL}/api/admin/ai/writing-assistant`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, action, context }),
+    body: JSON.stringify({ content, action, context, language }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

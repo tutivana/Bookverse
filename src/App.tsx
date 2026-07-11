@@ -90,8 +90,13 @@ export default function App() {
       try {
         const notifList = await fetchNotifications(user.id);
         setNotifications(notifList || []);
-      } catch (e) {
-        console.error("Error loading notifications:", e);
+      } catch (e: any) {
+        const isNetworkErr = e && (e.name === "TypeError" || e.message?.includes("fetch") || e.message?.includes("NetworkError") || e.message?.includes("Failed to fetch"));
+        if (isNetworkErr) {
+          console.warn("Transient network connection warning when fetching notifications:", e.message || e);
+        } else {
+          console.error("Error loading notifications:", e);
+        }
       }
     };
     loadNotifs();
@@ -113,6 +118,93 @@ export default function App() {
       }
     }
   }, [books, loading]);
+
+  // Support Service Workers registration and automatic sync upon reconnection
+  useEffect(() => {
+    // 1. Register Service Worker
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      const registerSW = () => {
+        navigator.serviceWorker
+          .register("/sw.js")
+          .then((reg) => {
+            console.log("[BookVerse SW] Registrado com sucesso no escopo:", reg.scope);
+          })
+          .catch((err) => {
+            console.error("[BookVerse SW] Falha ao registrar Service Worker:", err);
+          });
+      };
+
+      if (document.readyState === "complete") {
+        registerSW();
+      } else {
+        window.addEventListener("load", registerSW);
+        return () => window.removeEventListener("load", registerSW);
+      }
+    }
+  }, []);
+
+  // Support automatic sync upon reconnection
+  useEffect(() => {
+    // 2. Auto-sync function
+    const triggerAutoSync = async () => {
+      if (!user || !user.id) return;
+      console.log("[BookVerse SW] Conexão restaurada! Iniciando sincronização automática...");
+      try {
+        const { 
+          getPendingProgressList, 
+          getPendingReviewsList, 
+          deletePendingProgress, 
+          deletePendingReview 
+        } = await import("./lib/offlineStore");
+        const { saveReadingProgress, submitReview } = await import("./lib/api");
+
+        // Sync pending progress
+        const pProgress = await getPendingProgressList();
+        let progressSyncedCount = 0;
+        for (const progress of pProgress) {
+          if (progress.userId === user.id) {
+            await saveReadingProgress(
+              progress.userId,
+              progress.bookId,
+              progress.lastPage,
+              progress.audioPositionSeconds
+            );
+            await deletePendingProgress(progress.bookId);
+            progressSyncedCount++;
+          }
+        }
+
+        // Sync pending reviews
+        const pReviews = await getPendingReviewsList();
+        let reviewsSyncedCount = 0;
+        for (const r of pReviews) {
+          if (r.userId === user.id) {
+            await submitReview(r.userId, r.bookId, r.rating, r.comment);
+            await deletePendingReview(r.id);
+            reviewsSyncedCount++;
+          }
+        }
+
+        if (progressSyncedCount > 0 || reviewsSyncedCount > 0) {
+          console.log(`[BookVerse SW] Sincronização automática concluída: ${progressSyncedCount} progressos e ${reviewsSyncedCount} comentários.`);
+          loadUserData();
+        }
+      } catch (err) {
+        console.error("[BookVerse SW] Falha durante sincronização automática:", err);
+      }
+    };
+
+    window.addEventListener("online", triggerAutoSync);
+
+    // Initial check if we are online on mount
+    if (navigator.onLine && user && user.id) {
+      triggerAutoSync();
+    }
+
+    return () => {
+      window.removeEventListener("online", triggerAutoSync);
+    };
+  }, [user]);
 
   const handleMarkNotifsRead = async () => {
     if (!user) return;
@@ -196,7 +288,7 @@ export default function App() {
       const booksList = await fetchBooks();
       setBooks(booksList || []);
 
-      if (!user) {
+      if (!user || !user.id || user.id === "undefined" || user.id === "null") {
         setProgresses([]);
         setFavorites([]);
         setStats(null);
@@ -229,8 +321,13 @@ export default function App() {
           updateUserProfile(user.id, { favorites: seedFavs }).catch(console.error);
         }
       }
-    } catch (err) {
-      console.error("Error loading user data:", err);
+    } catch (err: any) {
+      const isNetworkErr = err && (err.name === "TypeError" || err.message?.includes("fetch") || err.message?.includes("NetworkError") || err.message?.includes("Failed to fetch"));
+      if (isNetworkErr) {
+        console.warn("Transient network connection warning when loading user data:", err.message || err);
+      } else {
+        console.error("Error loading user data:", err);
+      }
     }
   };
 
