@@ -77,6 +77,8 @@ export async function pullFromFirestore(): Promise<any> {
       notifications: [],
       payments: [],
       premiumRequests: [],
+      supportTickets: [],
+      passwordRecoveryRequests: [],
       subscriptionPrices: { monthly: 9.99, yearly: 89.99 },
       aiEnabled: true
     };
@@ -149,6 +151,20 @@ export async function pullFromFirestore(): Promise<any> {
     if (!reqsSnap.empty) {
       foundAny = true;
       loadedData.premiumRequests = uniqueById(reqsSnap.docs.map(docSnap => docSnap.data()));
+    }
+
+    // 5b. Fetch Support Tickets (from root collection)
+    const ticketsSnap = await withTimeout(getDocs(collection(firestoreDb, "supportTickets")));
+    if (!ticketsSnap.empty) {
+      foundAny = true;
+      loadedData.supportTickets = uniqueById(ticketsSnap.docs.map(docSnap => docSnap.data()));
+    }
+
+    // 5c. Fetch Password Recovery Requests (from root collection)
+    const recoverySnap = await withTimeout(getDocs(collection(firestoreDb, "passwordRecovery")));
+    if (!recoverySnap.empty) {
+      foundAny = true;
+      loadedData.passwordRecoveryRequests = uniqueById(recoverySnap.docs.map(docSnap => docSnap.data()));
     }
 
     // 6. Fetch Settings (from settings/app)
@@ -526,6 +542,34 @@ export async function pushToFirestore(dbData: any): Promise<void> {
     }
     for (const r of premiumRequests) {
       const rRef = doc(firestoreDb, "premiumRequests", r.id);
+      await safeSet(rRef, r);
+    }
+
+    // Sync Support Tickets (supportTickets/{ticketId})
+    const supportTickets = dbData.supportTickets || [];
+    const currentTicketsSnap = await getDocs(collection(firestoreDb, "supportTickets"));
+    const localTicketIds = new Set(supportTickets.map((t: any) => t.id));
+    for (const docSnap of currentTicketsSnap.docs) {
+      if (!localTicketIds.has(docSnap.id)) {
+        await safeDelete(docSnap.ref);
+      }
+    }
+    for (const t of supportTickets) {
+      const tRef = doc(firestoreDb, "supportTickets", t.id);
+      await safeSet(tRef, t);
+    }
+
+    // Sync Password Recovery Requests (passwordRecovery/{requestId})
+    const passwordRecoveryRequests = dbData.passwordRecoveryRequests || [];
+    const currentRecoverySnap = await getDocs(collection(firestoreDb, "passwordRecovery"));
+    const localRecoveryIds = new Set(passwordRecoveryRequests.map((r: any) => r.id));
+    for (const docSnap of currentRecoverySnap.docs) {
+      if (!localRecoveryIds.has(docSnap.id)) {
+        await safeDelete(docSnap.ref);
+      }
+    }
+    for (const r of passwordRecoveryRequests) {
+      const rRef = doc(firestoreDb, "passwordRecovery", r.id);
       await safeSet(rRef, r);
     }
 

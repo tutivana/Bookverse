@@ -45,6 +45,7 @@ import {
   fetchUserNotes,
   deleteUserAccount
 } from "../lib/api";
+import { encryptData, decryptData, sanitizeImportedData } from "../lib/crypt";
 
 interface UserProfileProps {
   user: User;
@@ -65,6 +66,15 @@ import OfflineManager from "./OfflineManager";
 import ContactSupportModal from "./ContactSupportModal";
 
 type ProfileTab = "profile" | "settings" | "security" | "privacy" | "notifications" | "offline" | "billing";
+
+const getInitialsAvatarSvg = (name: string): string => {
+  const firstLetter = (name ? name.trim().charAt(0) : "U").toUpperCase();
+  const colors = ["#e2b874", "#d97706", "#2563eb", "#059669", "#dc2626", "#7c3aed"];
+  const colorIndex = firstLetter.charCodeAt(0) % colors.length;
+  const bgColor = colors[colorIndex];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" rx="20" fill="${bgColor}" /><text x="50" y="55" font-family="'Inter', system-ui, sans-serif" font-size="44" font-weight="bold" fill="#121214" text-anchor="middle" dominant-baseline="middle">${firstLetter}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
 
 export default function UserProfile({
   user,
@@ -88,10 +98,47 @@ export default function UserProfile({
   const [email, setEmail] = useState(user.email);
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
   const [password, setPassword] = useState("••••••••");
+  const [confirmPassword, setConfirmPassword] = useState("••••••••");
   
   const [saveSuccess, setSaveSuccess] = useState("");
   const [saveError, setSaveError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Security & Role calculations
+  const isAdmin = user.role === "Super Administrador" || user.role === "Administrador";
+
+  // Real-time validation criteria
+  const isNameValid = name.trim().length >= 3;
+  const isUsernameValid = username.trim().length >= 3 && /^[a-zA-Z0-9_]+$/.test(username);
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const isChangingPassword = password !== "••••••••" && password !== "";
+  const hasMinLength = password.length >= 6;
+  const hasLetterAndNumber = /[a-zA-Z]/.test(password) && /[0-9]/.test(password);
+  const isPasswordValid = !isChangingPassword || (hasMinLength && hasLetterAndNumber);
+  const isConfirmPasswordValid = !isChangingPassword || (password === confirmPassword);
+
+  const isFormValid = isNameValid && isUsernameValid && isEmailValid && isPasswordValid && isConfirmPasswordValid;
+
+  // Password strength logic
+  const getPasswordStrength = () => {
+    if (!isChangingPassword) return { score: 0, text: "", color: "bg-zinc-800", textColor: "text-zinc-500" };
+    let score = 0;
+    if (password.length >= 6) score++;
+    if (/[a-zA-Z]/.test(password) && /[0-9]/.test(password)) score++;
+    if (password.length >= 8 && /[^a-zA-Z0-9]/.test(password)) score++;
+    
+    if (score === 1) return { score, text: "Fraca", color: "bg-red-500", textColor: "text-red-400" };
+    if (score === 2) return { score, text: "Média", color: "bg-amber-500", textColor: "text-amber-400" };
+    if (score === 3) return { score, text: "Forte", color: "bg-emerald-500", textColor: "text-emerald-400" };
+    return { score: 0, text: "Fraca", color: "bg-red-500", textColor: "text-red-400" };
+  };
+  const strength = getPasswordStrength();
+
+  // Import portability states
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importSuccess, setImportSuccess] = useState("");
 
   // Stats / Activities loaded dynamically
   const [userReviews, setUserReviews] = useState<any[]>([]);
@@ -99,7 +146,7 @@ export default function UserProfile({
   const [isReviewsLoading, setIsReviewsLoading] = useState(false);
 
   // Security States
-  const [twoFactor, setTwoFactor] = useState(user.security?.twoFactorEnabled || false);
+  const [twoFactor, setTwoFactor] = useState(isAdmin ? true : (user.security?.twoFactorEnabled || false));
   const [sessions, setSessions] = useState(
     user.security?.sessions || [
       { id: "s1", name: "Chrome no Windows", ip: "192.168.1.45", lastActive: "Ativa agora" },
@@ -109,7 +156,7 @@ export default function UserProfile({
 
   // Preference states
   const [language, setLanguage] = useState(user.preferences?.language || "pt-BR");
-  const [theme, setTheme] = useState(user.preferences?.theme || "dark");
+  const [theme, setTheme] = useState(user.preferences?.theme || "escuro");
   const [fontSize, setFontSize] = useState(user.preferences?.fontSize || "medium");
   const [layoutMode, setLayoutMode] = useState(user.preferences?.layoutMode || "paged");
 
@@ -174,8 +221,15 @@ export default function UserProfile({
     setLoading(true);
     setSaveSuccess("");
     setSaveError("");
+
+    if (!isFormValid) {
+      setSaveError("Por favor, corrija os erros de validação antes de prosseguir.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const updated = await updateUserProfile(user.id, {
+      const payload: any = {
         name,
         username,
         bio,
@@ -198,9 +252,17 @@ export default function UserProfile({
           accountPrivate,
           showStats,
         }
-      });
+      };
+
+      if (isChangingPassword) {
+        payload.password = password;
+      }
+
+      const updated = await updateUserProfile(user.id, payload);
       onUpdateUser(updated);
-      setSaveSuccess("Perfil atualizado com sucesso!");
+      setSaveSuccess("Perfil e senha atualizados com sucesso!");
+      setPassword("••••••••");
+      setConfirmPassword("••••••••");
       setTimeout(() => setSaveSuccess(""), 4000);
     } catch (err: any) {
       setSaveError(err.message || "Erro ao salvar informações.");
@@ -231,6 +293,9 @@ export default function UserProfile({
 
   // Handle Toggle 2FA
   const handleToggle2FA = async () => {
+    if (isAdmin) {
+      return; // 2FA is mandatory for admins
+    }
     const nextVal = !twoFactor;
     setTwoFactor(nextVal);
     try {
@@ -291,6 +356,7 @@ export default function UserProfile({
         createdAt: user.createdAt,
         bio: user.bio,
       },
+      preferences: user.preferences,
       statistics: stats,
       readingProgresses: progresses.map(p => {
         const b = books.find(book => book.id === p.bookId);
@@ -305,19 +371,72 @@ export default function UserProfile({
       }),
       reviews: userReviews,
       notes: userNotes,
-      favorites: favorites.map(id => {
-        const b = books.find(book => book.id === id);
-        return b ? { id: b.id, title: b.title, author: b.author } : { id };
-      })
+      favorites: favorites
     };
 
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(userData, null, 2));
-    const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `bookverse_data_${user.id}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    try {
+      // Secure symmetric encryption before download
+      const encryptedStr = encryptData(userData);
+      const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(encryptedStr);
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `bookverse_data_${user.id}.crypt`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err: any) {
+      console.error("Failed to export data:", err);
+    }
+  };
+
+  // Secure Portability Import File Handler
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportError("");
+    setImportSuccess("");
+    setImporting(true);
+
+    try {
+      const text = await file.text();
+      // Decrypt XOR ciphertext
+      const decrypted = decryptData(text);
+      // Clean and prevent injection or privilege escalation
+      const sanitized = sanitizeImportedData(decrypted);
+
+      // Now prepare a merged update payload
+      const payload: any = {};
+      if (sanitized.bio !== undefined) payload.bio = sanitized.bio;
+      if (sanitized.username !== undefined) payload.username = sanitized.username;
+      if (sanitized.preferences !== undefined) {
+        payload.preferences = sanitized.preferences;
+      }
+      if (sanitized.favorites !== undefined) {
+        payload.favorites = sanitized.favorites;
+      }
+
+      // Update on the backend via existing API
+      const updatedUser = await updateUserProfile(user.id, payload);
+      
+      // If there are notes, import them through server
+      if (sanitized.notes && sanitized.notes.length > 0) {
+        await fetch("/api/notes/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id, notes: sanitized.notes }),
+        });
+      }
+
+      onUpdateUser(updatedUser);
+      setImportSuccess(`Dados importados com sucesso! Restauramos suas preferências, favoritos e ${sanitized.notes?.length || 0} anotações.`);
+    } catch (err: any) {
+      console.error(err);
+      setImportError(err.message || "Falha ao importar dados. O arquivo pode estar corrompido ou modificado.");
+    } finally {
+      setImporting(false);
+      e.target.value = ""; // Reset input
+    }
   };
 
   // Handle delete account
@@ -358,7 +477,7 @@ export default function UserProfile({
           {/* Avatar frame */}
           <div className="w-24 h-24 rounded-2xl border-2 border-[#e2b874]/40 overflow-hidden bg-zinc-900 shadow-lg relative group">
             <img
-              src={avatarUrl || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(user.name)}`}
+              src={avatarUrl || getInitialsAvatarSvg(user.name)}
               alt={user.name}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -736,19 +855,43 @@ export default function UserProfile({
                   {/* Photo Edit Option */}
                   <div className="p-4 bg-zinc-900/50 border border-zinc-800/80 rounded-2xl flex flex-col sm:flex-row gap-4 items-center">
                     <img
-                      src={avatarUrl || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`}
+                      src={avatarUrl || getInitialsAvatarSvg(name)}
                       alt={name}
                       className="w-16 h-16 rounded-xl border border-zinc-800 object-cover"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="flex-grow space-y-1 w-full">
-                      <label className="block font-semibold text-zinc-400">URL da Foto de Perfil</label>
+                    <div className="flex-grow space-y-1 w-full text-left">
+                      <label className="block font-semibold text-zinc-400">Foto de Perfil</label>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <label className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/50 font-bold py-2 px-3 rounded-xl text-[11px] transition cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-95">
+                          <Download className="w-3.5 h-3.5 rotate-180" />
+                          Carregar Arquivo de Imagem
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  if (typeof reader.result === "string") {
+                                    setAvatarUrl(reader.result);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                        <span className="text-[10px] text-zinc-500 text-center sm:text-left self-center">ou cole um endereço de URL:</span>
+                      </div>
                       <input
                         type="text"
                         value={avatarUrl}
                         onChange={(e) => setAvatarUrl(e.target.value)}
-                        placeholder="Insira uma URL de imagem válida"
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-3 text-zinc-200 outline-none focus:border-[#e2b874] transition"
+                        placeholder="Endereço de URL da Imagem"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-zinc-200 outline-none focus:border-[#e2b874] transition mt-1.5 text-[11px]"
                       />
                     </div>
                   </div>
@@ -761,8 +904,17 @@ export default function UserProfile({
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-3.5 text-zinc-100 outline-none focus:border-[#e2b874] transition"
+                        className={`w-full bg-zinc-900 border rounded-xl py-3 px-3.5 text-zinc-100 outline-none transition ${
+                          name.trim().length === 0
+                            ? "border-zinc-800 focus:border-[#e2b874]"
+                            : isNameValid
+                              ? "border-emerald-800 focus:border-emerald-500"
+                              : "border-red-800 focus:border-red-500"
+                        }`}
                       />
+                      <span className={`text-[10px] block mt-1 transition-all ${isNameValid ? "text-emerald-400" : "text-zinc-500"}`}>
+                        {isNameValid ? "✓ Nome válido (mín. 3 caracteres)" : "ℹ Mínimo de 3 caracteres"}
+                      </span>
                     </div>
 
                     <div className="space-y-1">
@@ -772,8 +924,19 @@ export default function UserProfile({
                         value={username}
                         onChange={(e) => setUsername(e.target.value.replace(/\s+/g, ""))}
                         placeholder="ex: tutorleitor"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-3.5 text-zinc-100 outline-none focus:border-[#e2b874] transition"
+                        className={`w-full bg-zinc-900 border rounded-xl py-3 px-3.5 text-zinc-100 outline-none transition ${
+                          username.trim().length === 0
+                            ? "border-zinc-800 focus:border-[#e2b874]"
+                            : isUsernameValid
+                              ? "border-emerald-800 focus:border-emerald-500"
+                              : "border-red-800 focus:border-red-500"
+                        }`}
                       />
+                      <span className={`text-[10px] block mt-1 transition-all ${isUsernameValid ? "text-emerald-400" : "text-zinc-500"}`}>
+                        {isUsernameValid 
+                          ? "✓ Nome de usuário válido" 
+                          : "ℹ Letras, números e underline (mín. 3 caracteres)"}
+                      </span>
                     </div>
                   </div>
 
@@ -785,8 +948,17 @@ export default function UserProfile({
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-3.5 text-zinc-100 outline-none focus:border-[#e2b874] transition"
+                        className={`w-full bg-zinc-900 border rounded-xl py-3 px-3.5 text-zinc-100 outline-none transition ${
+                          email.trim().length === 0
+                            ? "border-zinc-800 focus:border-[#e2b874]"
+                            : isEmailValid
+                              ? "border-emerald-800 focus:border-emerald-500"
+                              : "border-red-800 focus:border-red-500"
+                        }`}
                       />
+                      <span className={`text-[10px] block mt-1 transition-all ${isEmailValid ? "text-emerald-400" : "text-zinc-500"}`}>
+                        {isEmailValid ? "✓ E-mail em formato válido" : "ℹ Insira um e-mail válido"}
+                      </span>
                     </div>
 
                     <div className="space-y-1 relative">
@@ -795,10 +967,71 @@ export default function UserProfile({
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-3.5 text-zinc-100 outline-none focus:border-[#e2b874] transition"
+                        className={`w-full bg-zinc-900 border rounded-xl py-3 px-3.5 text-zinc-100 outline-none transition ${
+                          !isChangingPassword
+                            ? "border-zinc-800 focus:border-[#e2b874]"
+                            : isPasswordValid
+                              ? "border-emerald-800 focus:border-emerald-500"
+                              : "border-red-800 focus:border-red-500"
+                        }`}
                       />
+                      {!isChangingPassword ? (
+                        <span className="text-[10px] text-zinc-500 block mt-1">
+                          ℹ Digite uma nova senha para alterá-la.
+                        </span>
+                      ) : (
+                        <div className="mt-2 space-y-1.5 p-3 bg-zinc-950 rounded-xl border border-zinc-850">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-zinc-450">Força da Senha:</span>
+                            <span className={`font-bold ${strength.textColor}`}>{strength.text}</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden flex gap-0.5">
+                            <div className={`h-full transition-all duration-300 ${strength.score >= 1 ? strength.color : "bg-zinc-850"}`} style={{ width: "33.33%" }}></div>
+                            <div className={`h-full transition-all duration-300 ${strength.score >= 2 ? strength.color : "bg-zinc-850"}`} style={{ width: "33.33%" }}></div>
+                            <div className={`h-full transition-all duration-300 ${strength.score >= 3 ? strength.color : "bg-zinc-850"}`} style={{ width: "33.33%" }}></div>
+                          </div>
+                          <div className="text-[9px] space-y-1 pt-1 border-t border-zinc-900/50">
+                            <div className="flex items-center gap-1">
+                              <span className={hasMinLength ? "text-emerald-400" : "text-zinc-500"}>
+                                {hasMinLength ? "✓" : "○"} Mínimo de 6 caracteres
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className={hasLetterAndNumber ? "text-emerald-400" : "text-zinc-500"}>
+                                {hasLetterAndNumber ? "✓" : "○"} Letras e números
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {isChangingPassword && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-1"
+                    >
+                      <label className="block font-semibold text-zinc-400 uppercase tracking-wider text-[10px]">Confirmar Nova Senha</label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className={`w-full bg-zinc-900 border rounded-xl py-3 px-3.5 text-zinc-100 outline-none transition ${
+                          confirmPassword === ""
+                            ? "border-zinc-800 focus:border-[#e2b874]"
+                            : isConfirmPasswordValid
+                              ? "border-emerald-800 focus:border-emerald-500"
+                              : "border-red-800 focus:border-red-500"
+                        }`}
+                      />
+                      <span className={`text-[10px] block mt-1 transition-all ${isConfirmPasswordValid ? "text-emerald-400" : "text-zinc-500"}`}>
+                        {isConfirmPasswordValid ? "✓ As senhas conferem" : "✗ As senhas não conferem"}
+                      </span>
+                    </motion.div>
+                  )}
 
                   <div className="space-y-1">
                     <label className="block font-semibold text-zinc-400 uppercase tracking-wider text-[10px]">Biografia do Leitor</label>
@@ -841,9 +1074,10 @@ export default function UserProfile({
                           }}
                           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 px-3 text-zinc-200 font-bold"
                         >
-                          <option value="dark">Escuro (BookVerse)</option>
-                          <option value="light">Claro (Clássico)</option>
-                          <option value="system">Sistema</option>
+                          <option value="escuro">Modo Escuro (BookVerse)</option>
+                          <option value="sepia">Modo Sépia (Conforto)</option>
+                          <option value="claro">Modo Claro (Clássico)</option>
+                          <option value="auto">Automático (Dia / Noite)</option>
                         </select>
                       </div>
 
@@ -935,10 +1169,14 @@ export default function UserProfile({
 
                   <button
                     type="submit"
-                    disabled={loading}
-                    className="w-full bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 py-3.5 rounded-xl font-bold transition active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                    disabled={loading || !isFormValid}
+                    className={`w-full py-3.5 rounded-xl font-bold transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 ${
+                      !isFormValid 
+                        ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/30" 
+                        : "bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 cursor-pointer"
+                    }`}
                   >
-                    {loading ? "Salvando..." : "Salvar Configurações de Perfil"}
+                    {loading ? "Salvando..." : !isFormValid ? "Campos Inválidos ou Incompletos" : "Salvar Configurações de Perfil"}
                   </button>
                 </form>
               </motion.div>
@@ -968,18 +1206,23 @@ export default function UserProfile({
                       Autenticação em Duas Etapas (2FA)
                     </h3>
                     <p className="text-[11px] text-zinc-400 max-w-lg leading-relaxed">
-                      Adicione uma camada extra de segurança à sua conta de leitor. Exige código de verificação via e-mail ou app authenticator a cada novo acesso.
+                      {isAdmin 
+                        ? "Como administrador, a autenticação em duas etapas é obrigatória para proteger o painel e os dados de usuários."
+                        : "Adicione uma camada extra de segurança à sua conta de leitor. Exige código de verificação via e-mail ou app authenticator a cada novo acesso."}
                     </p>
                   </div>
                   <button
                     onClick={handleToggle2FA}
-                    className={`py-2 px-4 rounded-xl text-xs font-bold transition cursor-pointer flex-shrink-0 ${
-                      twoFactor
-                        ? "bg-emerald-950 text-emerald-400 border border-emerald-800/40"
-                        : "bg-[#e2b874] text-zinc-950 hover:bg-[#c59e5f]"
+                    disabled={isAdmin}
+                    className={`py-2 px-4 rounded-xl text-xs font-bold transition flex-shrink-0 ${
+                      isAdmin
+                        ? "bg-amber-950/40 text-amber-400 border border-amber-900/40 cursor-not-allowed"
+                        : twoFactor
+                          ? "bg-emerald-950 text-emerald-400 border border-emerald-800/40 cursor-pointer"
+                          : "bg-[#e2b874] text-zinc-950 hover:bg-[#c59e5f] cursor-pointer"
                     }`}
                   >
-                    {twoFactor ? "Habilitado ✓" : "Ativar 2FA"}
+                    {isAdmin ? "Obrigatório ✓" : twoFactor ? "Habilitado ✓" : "Ativar 2FA"}
                   </button>
                 </div>
 
@@ -1080,23 +1323,50 @@ export default function UserProfile({
                 </div>
 
                 {/* Portability block */}
-                <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="space-y-1">
-                    <h3 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
-                      <Download className="w-3.5 h-3.5 text-[#e2b874]" />
-                      Portabilidade de Dados Pessoais
-                    </h3>
-                    <p className="text-[11px] text-zinc-400 max-w-lg leading-relaxed">
-                      Solicite a exportação de todos os seus dados armazenados (perfil, progresso em PDFs, notas salvas, favoritos e histórico de áudio) em formato estruturado JSON.
-                    </p>
+                <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-2xl space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="space-y-1">
+                      <h3 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                        <Download className="w-3.5 h-3.5 text-[#e2b874]" />
+                        Portabilidade de Dados Pessoais
+                      </h3>
+                      <p className="text-[11px] text-zinc-400 max-w-lg leading-relaxed">
+                        Exporte seus dados armazenados (perfil, progresso, notas e favoritos) em um arquivo criptografado de segurança (.crypt), ou restaure dados anteriores fazendo o upload do seu arquivo.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <label className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/50 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer flex-shrink-0 flex items-center justify-center gap-1.5 active:scale-95 text-center flex-1 sm:flex-initial">
+                        <FileText className="w-3.5 h-3.5" />
+                        {importing ? "Importando..." : "Importar .crypt"}
+                        <input
+                          type="file"
+                          accept=".crypt"
+                          disabled={importing}
+                          onChange={handleImportFile}
+                          className="hidden"
+                        />
+                      </label>
+                      <button
+                        onClick={handleExportData}
+                        className="bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer flex-shrink-0 flex items-center justify-center gap-1.5 active:scale-95 flex-1 sm:flex-initial"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Exportar .crypt
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={handleExportData}
-                    className="bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer flex-shrink-0 flex items-center gap-1.5"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Exportar JSON
-                  </button>
+
+                  {importError && (
+                    <div className="p-3 bg-red-950/40 border border-red-900/30 text-red-400 rounded-xl text-xs leading-relaxed">
+                      {importError}
+                    </div>
+                  )}
+
+                  {importSuccess && (
+                    <div className="p-3 bg-emerald-950/40 border border-emerald-900/30 text-emerald-400 rounded-xl text-xs leading-relaxed">
+                      {importSuccess}
+                    </div>
+                  )}
                 </div>
 
                 {/* Destructive account deletion block */}

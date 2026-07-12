@@ -35,6 +35,27 @@ import UserProfile from "./components/UserProfile";
 import NotificationCenter from "./components/NotificationCenter";
 import PremiumPaywallModal from "./components/PremiumPaywallModal";
 
+export function getInitialsAvatarSvg(name: string): string {
+  const firstLetter = (name || "U").charAt(0).toUpperCase();
+  const charCode = firstLetter.charCodeAt(0) || 65;
+  const colors = [
+    { bg: "#1e3a8a", text: "#bfdbfe" }, // Blue
+    { bg: "#14532d", text: "#bbf7d0" }, // Green
+    { bg: "#7c2d12", text: "#ffedd5" }, // Orange/Red
+    { bg: "#4c1d95", text: "#ddd6fe" }, // Purple
+    { bg: "#312e81", text: "#c7d2fe" }, // Indigo
+    { bg: "#581c87", text: "#f3e8ff" }, // Fuchsia
+    { bg: "#831843", text: "#fce7f3" }, // Pink
+    { bg: "#1e293b", text: "#cbd5e1" }, // Slate
+  ];
+  const color = colors[charCode % colors.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+    <rect width="100" height="100" fill="${color.bg}" />
+    <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="'Inter', system-ui, sans-serif" font-size="50" font-weight="bold" fill="${color.text}">${firstLetter}</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -655,7 +676,7 @@ export default function App() {
                 >
                   <div className="relative">
                     <img
-                      src={user.avatarUrl || "https://api.dicebear.com/7.x/adventurer/svg"}
+                      src={user.avatarUrl || getInitialsAvatarSvg(user.name)}
                       alt={user.name}
                       className="w-7 h-7 rounded-lg border border-zinc-800 object-cover"
                       referrerPolicy="no-referrer"
@@ -752,6 +773,7 @@ export default function App() {
                 onUpdateProgress={handleUpdateReadingProgress}
                 progress={activeBookProgress}
                 onTriggerPaywall={triggerPaywall}
+                onUpdateUser={setUser}
               />
             )}
 

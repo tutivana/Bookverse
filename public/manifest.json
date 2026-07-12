@@ -1,0 +1,38 @@
+{
+  "short_name": "BookVerse",
+  "name": "BookVerse - Leitor Digital & Audiolivros",
+  "description": "Sua biblioteca digital premium offline com assistente de IA Gemini integrado e audiolivros.",
+  "icons": [
+    {
+      "src": "/bookverse_logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/bookverse_logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/bookverse_logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#121214",
+  "theme_color": "#121214",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["books", "education", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Ver Biblioteca",
+      "url": "/",
+      "icons": [{ "src": "/bookverse_logo.svg", "sizes": "192x192" }]
+    }
+  ]
+}

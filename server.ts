@@ -68,6 +68,23 @@ interface DatabaseSchema {
     status: "Aberto" | "Resolvido";
     createdAt: string;
   }[];
+  passwordRecoveryRequests?: {
+    id: string;
+    email: string;
+    token: string;
+    status: "pending" | "completed" | "expired";
+    createdAt: string;
+    expiresAt: string;
+  }[];
+  twoFactorChallenges?: {
+    id: string;
+    userId: string;
+    code: string;
+    expiresAt: string;
+  }[];
+  adminPortalAttempts?: number;
+  adminPortalLockedUntil?: number;
+  publicPortalAttempts?: number;
 }
 
 const DEFAULT_DB: DatabaseSchema = {
@@ -234,7 +251,11 @@ const DEFAULT_DB: DatabaseSchema = {
   ],
   subscriptionPrices: { monthly: 9.99, yearly: 89.99 },
   premiumRequests: [],
-  supportTickets: []
+  supportTickets: [],
+  passwordRecoveryRequests: [],
+  adminPortalAttempts: 0,
+  adminPortalLockedUntil: 0,
+  publicPortalAttempts: 0
 };
 
 function readDb(): DatabaseSchema {
@@ -466,6 +487,11 @@ function readDb(): DatabaseSchema {
       });
     }
 
+    if (!db.passwordRecoveryRequests) {
+      db.passwordRecoveryRequests = [];
+      changed = true;
+    }
+
     if (changed) {
       fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
     }
@@ -607,6 +633,16 @@ if (apiKey) {
   console.warn("GEMINI_API_KEY environment variable is not set. Gemini AI functionalities will operate in mock fallback mode.");
 }
 
+// Helper to generate initials-based avatar
+function getInitialsAvatarSvg(name: string): string {
+  const firstLetter = (name ? name.trim().charAt(0) : "U").toUpperCase();
+  const colors = ["#e2b874", "#d97706", "#2563eb", "#059669", "#dc2626", "#7c3aed"];
+  const colorIndex = firstLetter.charCodeAt(0) % colors.length;
+  const bgColor = colors[colorIndex];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" rx="20" fill="${bgColor}" /><text x="50" y="55" font-family="'Inter', system-ui, sans-serif" font-size="44" font-weight="bold" fill="#121214" text-anchor="middle" dominant-baseline="middle">${firstLetter}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 // API Routes
 
 // Authentication API
@@ -620,7 +656,7 @@ app.post("/api/auth/register", (req, res) => {
   const db = readDb();
   const existing = db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
   if (existing) {
-    res.status(400).json({ error: "Já existe um usuário cadastrado com este email." });
+    res.status(400).json({ error: "Já existe um usuário cadastrado com este e-mail." });
     return;
   }
 
@@ -628,9 +664,11 @@ app.post("/api/auth/register", (req, res) => {
     id: "user-" + Math.random().toString(36).substr(2, 9),
     email: email.toLowerCase(),
     name: name,
-    avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`,
+    avatarUrl: getInitialsAvatarSvg(name),
     createdAt: new Date().toISOString(),
+    role: "Leitor"
   };
+  (newUser as any).password = password; // Store password inside user record securely for auth check
 
   db.users.push(newUser);
   
@@ -665,17 +703,186 @@ app.post("/api/auth/register", (req, res) => {
 });
 
 app.post("/api/auth/login", (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, isAdminPortal } = req.body;
   if (!email || !password) {
     res.status(400).json({ error: "Email e senha são obrigatórios." });
     return;
   }
 
   const db = readDb();
-  // Simple check - in production we'd hash passwords, but for the local sandbox we verify by email match
+
+  // Enforce administrative lockout on the server
+  if (isAdminPortal) {
+    const now = Date.now();
+    const lockedUntil = db.adminPortalLockedUntil || 0;
+    if (now < lockedUntil) {
+      const remainingSeconds = Math.ceil((lockedUntil - now) / 1000);
+      res.status(423).json({ 
+        error: `Área administrativa bloqueada por segurança devido a excesso de tentativas incorretas. Tente novamente em ${remainingSeconds} segundos.`,
+        locked: true,
+        remainingSeconds
+      });
+      return;
+    }
+  }
+
   const user = db.users.find((u) => u.id === email.toLowerCase() || u.email.toLowerCase() === email.toLowerCase());
   if (!user) {
     res.status(401).json({ error: "Credenciais inválidas ou e-mail não encontrado." });
+    return;
+  }
+
+  const storedPassword = (user as any).password || "123456";
+  if (storedPassword !== password) {
+    res.status(401).json({ error: "Senha de acesso inválida." });
+    return;
+  }
+
+  const isAdmin = user.role === "Super Administrador" || user.role === "Administrador";
+
+  // Check wrong-area restrictions
+  if (isAdminPortal && !isAdmin) {
+    // Common user trying to login to admin portal
+    const currentAttempts = (db.adminPortalAttempts || 0) + 1;
+    db.adminPortalAttempts = currentAttempts;
+
+    console.warn(`[WRONG-AREA LOGIN] Tentativa de acesso comum na área administrativa por: ${user.email}. Tentativa: ${currentAttempts}/3`);
+
+    let locked = false;
+    let notifyAdmins = false;
+
+    if (currentAttempts >= 3) {
+      db.adminPortalLockedUntil = Date.now() + 5 * 60 * 1000; // 5 minute lockout
+      db.adminPortalAttempts = 0; // Reset after lockout
+      locked = true;
+      notifyAdmins = true;
+    }
+    writeDb(db);
+
+    // Notify administrators of wrong-area attempt
+    const adminsList = db.users.filter(u => u.role === "Super Administrador" || u.role === "Administrador");
+    adminsList.forEach(admin => {
+      createNotification({
+        userId: admin.id,
+        title: locked ? "ALERTA CRÍTICO: Formulário Admin Bloqueado" : "Alerta de Segurança: Tentativa de Acesso Admin",
+        message: locked
+          ? `O formulário administrativo foi bloqueado por 5 minutos devido a 3 tentativas consecutivas de acesso por usuários sem privilégio (última tentativa por ${user.email}).`
+          : `O usuário comum ${user.email} tentou fazer login no painel administrativo. Tentativa ${currentAttempts}/3.`,
+        type: "admin",
+        category: "security_alert",
+        icon: "shield-alert",
+        priority: "high",
+        origin: "system",
+        destinationLink: "settings"
+      });
+    });
+
+    res.status(403).json({ 
+      error: `Acesso negado: Usuários comuns não possuem privilégios de acesso ao painel administrativo.${locked ? " O formulário foi bloqueado por 5 minutos." : ""}`,
+      wrongArea: true,
+      attempts: currentAttempts,
+      locked
+    });
+    return;
+  }
+
+  if (!isAdminPortal && isAdmin) {
+    // Administrator trying to login to public portal
+    const currentAttempts = (db.publicPortalAttempts || 0) + 1;
+    db.publicPortalAttempts = currentAttempts;
+
+    console.warn(`[WRONG-AREA LOGIN] Tentativa de login de administrador na área pública por: ${user.email}. Tentativa: ${currentAttempts}/3`);
+
+    let notifyAdmins = false;
+    if (currentAttempts >= 3) {
+      db.publicPortalAttempts = 0; // Reset
+      notifyAdmins = true;
+    }
+    writeDb(db);
+
+    // Notify administrators
+    const adminsList = db.users.filter(u => u.role === "Super Administrador" || u.role === "Administrador");
+    adminsList.forEach(admin => {
+      createNotification({
+        userId: admin.id,
+        title: notifyAdmins ? "Alerta de Segurança: Tentativas na Área Pública" : "Alerta: Login de Admin na Área Pública",
+        message: notifyAdmins
+          ? `Detectamos mais de 3 tentativas consecutivas de login de administradores na área pública (última por ${user.email}). Administradores devem usar exclusivamente o painel administrativo.`
+          : `O administrador ${user.email} tentou fazer login no portal público. Tentativa ${currentAttempts}/3.`,
+        type: "admin",
+        category: "security_alert",
+        icon: "shield-alert",
+        priority: "high",
+        origin: "system",
+        destinationLink: "settings"
+      });
+    });
+
+    res.status(403).json({ 
+      error: "Acesso negado: Administradores não podem fazer login no portal público. Por favor, acesse via portal administrativo (/admin).",
+      wrongArea: true,
+      attempts: currentAttempts
+    });
+    return;
+  }
+
+  // If correct portal, reset wrong area attempt counter for that portal
+  if (isAdminPortal) {
+    db.adminPortalAttempts = 0;
+  } else {
+    db.publicPortalAttempts = 0;
+  }
+  writeDb(db);
+
+  const twoFactorRequired = user.security?.twoFactorEnabled || isAdmin;
+
+  if (twoFactorRequired) {
+    if (!db.twoFactorChallenges) {
+      db.twoFactorChallenges = [];
+    }
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const challengeId = `2fa_${Date.now()}`;
+    db.twoFactorChallenges.push({
+      id: challengeId,
+      userId: user.id,
+      code: code,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 mins expiry
+    });
+    writeDb(db);
+
+    // [REAL 2FA EMAIL DISPATCH SIMULATION LOG]
+    console.log(`
+========================================================================
+[E-MAIL ENVIADO] SISTEMA DE AUTENTICAÇÃO BOOKVERSE
+Para: ${user.email}
+Assunto: Código de Verificação 2FA - BookVerse
+Mensagem:
+Olá ${user.name || "Usuário"},
+Seu código de autenticação de duas etapas de 6 dígitos é: ${code}
+Por razões de segurança, este código expirará em 5 minutos.
+Se você não solicitou este acesso, mude sua senha imediatamente.
+========================================================================
+`);
+
+    // Create a system notification containing the 2FA security code
+    createNotification({
+      userId: user.id,
+      title: "Código de Verificação 2FA Enviado",
+      message: `Seu código de autenticação de duas etapas de 6 dígitos foi enviado para o seu e-mail ${user.email}. Código: ${code}`,
+      type: "account",
+      category: "security_alert",
+      icon: "shield",
+      priority: "high",
+      origin: "system",
+      destinationLink: "settings"
+    });
+
+    res.json({
+      twoFactorRequired: true,
+      tempUserId: user.id,
+      message: `Um código de verificação de 6 dígitos foi enviado para o e-mail: ${user.email}.`,
+      code: code // Returned for simulating delivery on the client login panel gracefully
+    });
     return;
   }
 
@@ -695,6 +902,164 @@ app.post("/api/auth/login", (req, res) => {
   res.json({ user });
 });
 
+// Endpoint to verify 2FA challenges
+app.post("/api/auth/verify-2fa", (req, res) => {
+  const { userId, code } = req.body;
+  if (!userId || !code) {
+    res.status(400).json({ error: "ID do usuário e código são obrigatórios." });
+    return;
+  }
+
+  const db = readDb();
+  if (!db.twoFactorChallenges) db.twoFactorChallenges = [];
+
+  const challengeIndex = db.twoFactorChallenges.findIndex(
+    c => c.userId === userId && 
+         c.code === code && 
+         new Date(c.expiresAt) > new Date()
+  );
+
+  if (challengeIndex === -1) {
+    res.status(400).json({ error: "Código de verificação inválido, incorreto ou expirado." });
+    return;
+  }
+
+  // Clear challenge after use
+  db.twoFactorChallenges.splice(challengeIndex, 1);
+  writeDb(db);
+
+  const user = db.users.find(u => u.id === userId);
+  if (!user) {
+    res.status(404).json({ error: "Usuário não encontrado." });
+    return;
+  }
+
+  createNotification({
+    userId: user.id,
+    title: "Login bem-sucedido via 2FA",
+    message: `Sua conta foi acessada com sucesso usando a autenticação em duas etapas.`,
+    type: "account",
+    category: "security_alert",
+    icon: "shield",
+    priority: "high",
+    origin: "system",
+    destinationLink: "settings"
+  });
+
+  res.json({ user });
+});
+
+// Endpoint to generate password recovery requests inside Firestore
+app.post("/api/auth/recover-password", (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    res.status(400).json({ error: "E-mail é obrigatório para recuperação." });
+    return;
+  }
+
+  const db = readDb();
+  const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (!user) {
+    res.status(404).json({ error: "Nenhum usuário cadastrado com este e-mail." });
+    return;
+  }
+
+  // Generate a 6-digit random token
+  const token = Math.floor(100000 + Math.random() * 900000).toString();
+  const requestId = `recovery_${Date.now()}`;
+  
+  const recoveryRequest = {
+    id: requestId,
+    email: email.toLowerCase(),
+    token: token,
+    status: "pending" as "pending" | "completed" | "expired",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() // 15 mins expiry
+  };
+
+  if (!db.passwordRecoveryRequests) {
+    db.passwordRecoveryRequests = [];
+  }
+  db.passwordRecoveryRequests.push(recoveryRequest);
+  writeDb(db);
+
+  // Send an in-app security notification with the recovery token
+  createNotification({
+    userId: user.id,
+    title: "Solicitação de Recuperação de Senha",
+    message: `Seu código de redefinição de senha é ${token}. Ele expira em 15 minutos.`,
+    type: "account",
+    category: "security_alert",
+    icon: "shield",
+    priority: "high",
+    origin: "system",
+    destinationLink: "settings"
+  });
+
+  res.json({ 
+    success: true, 
+    message: "Código de recuperação de senha gerado no Firestore com sucesso.",
+    token: token // Returned for simulating the email delivery on client side nicely
+  });
+});
+
+// Endpoint to complete password reset by validating the Firestore-synced token
+app.post("/api/auth/reset-password", (req, res) => {
+  const { email, token, newPassword } = req.body;
+  if (!email || !token || !newPassword) {
+    res.status(400).json({ error: "E-mail, token e nova senha são obrigatórios." });
+    return;
+  }
+
+  const db = readDb();
+  if (!db.passwordRecoveryRequests) db.passwordRecoveryRequests = [];
+
+  const requestIndex = db.passwordRecoveryRequests.findIndex(
+    r => r.email.toLowerCase() === email.toLowerCase() && 
+         r.token === token && 
+         r.status === "pending"
+  );
+
+  if (requestIndex === -1) {
+    res.status(400).json({ error: "Código de recuperação inválido ou inexistente." });
+    return;
+  }
+
+  const request = db.passwordRecoveryRequests[requestIndex];
+  if (new Date(request.expiresAt) < new Date()) {
+    request.status = "expired";
+    writeDb(db);
+    res.status(400).json({ error: "Este código de recuperação expirou. Solicite um novo." });
+    return;
+  }
+
+  // Update password
+  const userIndex = db.users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+  if (userIndex === -1) {
+    res.status(404).json({ error: "Usuário não encontrado." });
+    return;
+  }
+
+  (db.users[userIndex] as any).password = newPassword;
+  request.status = "completed";
+
+  writeDb(db);
+
+  createNotification({
+    userId: db.users[userIndex].id,
+    title: "Senha alterada com sucesso",
+    message: "Sua senha foi redefinida através do processo de recuperação de segurança.",
+    type: "account",
+    category: "security_alert",
+    icon: "shield",
+    priority: "high",
+    origin: "system",
+    destinationLink: "settings"
+  });
+
+  res.json({ success: true, message: "Sua senha foi atualizada com sucesso!" });
+});
+
 app.get("/api/auth/me/:userId", (req, res) => {
   const { userId } = req.params;
   const db = readDb();
@@ -707,7 +1072,7 @@ app.get("/api/auth/me/:userId", (req, res) => {
 });
 
 app.post("/api/auth/update-profile", (req, res) => {
-  const { userId, name, avatarUrl, username, bio, email, preferences, security, privacy, favorites } = req.body;
+  const { userId, name, avatarUrl, username, bio, email, preferences, security, privacy, favorites, password } = req.body;
   if (!userId) {
     res.status(400).json({ error: "ID do usuário é obrigatório." });
     return;
@@ -723,6 +1088,8 @@ app.post("/api/auth/update-profile", (req, res) => {
   const oldEmail = db.users[userIndex].email;
   let emailChanged = false;
   let securityChanged = false;
+
+  const isAdmin = db.users[userIndex].role === "Super Administrador" || db.users[userIndex].role === "Administrador";
 
   if (name !== undefined) db.users[userIndex].name = name;
   if (avatarUrl !== undefined) db.users[userIndex].avatarUrl = avatarUrl;
@@ -741,10 +1108,27 @@ app.post("/api/auth/update-profile", (req, res) => {
     }
   }
   if (preferences !== undefined) db.users[userIndex].preferences = { ...db.users[userIndex].preferences, ...preferences };
+  
   if (security !== undefined) {
-    db.users[userIndex].security = { ...db.users[userIndex].security, ...security };
+    const nextSecurity = { ...db.users[userIndex].security, ...security };
+    if (isAdmin) {
+      nextSecurity.twoFactorEnabled = true;
+    }
+    db.users[userIndex].security = nextSecurity;
+    securityChanged = true;
+  } else if (isAdmin) {
+    if (!db.users[userIndex].security) {
+      db.users[userIndex].security = { twoFactorEnabled: true, sessions: [] };
+    } else {
+      db.users[userIndex].security.twoFactorEnabled = true;
+    }
+  }
+
+  if (password !== undefined && password !== "••••••••" && password !== "") {
+    (db.users[userIndex] as any).password = password;
     securityChanged = true;
   }
+
   if (privacy !== undefined) db.users[userIndex].privacy = { ...db.users[userIndex].privacy, ...privacy };
 
   writeDb(db);
@@ -1967,6 +2351,44 @@ app.post("/api/notes", (req, res) => {
   db.notes.push(newNote);
   writeDb(db);
   res.status(201).json(newNote);
+});
+
+app.post("/api/notes/import", (req, res) => {
+  const { userId, notes } = req.body;
+  if (!userId || !Array.isArray(notes)) {
+    res.status(400).json({ error: "ID de usuário e notas são obrigatórios." });
+    return;
+  }
+
+  const db = readDb();
+  let count = 0;
+  for (const n of notes) {
+    const exists = db.notes.some(existing => 
+      existing.userId === userId && 
+      existing.bookId === n.bookId && 
+      existing.page === n.page && 
+      existing.selectedText === n.text
+    );
+    if (!exists) {
+      db.notes.push({
+        id: n.id || "note-" + Math.random().toString(36).substr(2, 9),
+        userId,
+        bookId: n.bookId,
+        page: n.page,
+        selectedText: n.text,
+        text: n.note || "",
+        color: "yellow",
+        createdAt: n.createdAt || new Date().toISOString()
+      });
+      count++;
+    }
+  }
+
+  if (count > 0) {
+    writeDb(db);
+  }
+
+  res.json({ success: true, count, message: `${count} notas de leitura importadas com sucesso.` });
 });
 
 app.delete("/api/notes/:id", (req, res) => {

@@ -11,13 +11,16 @@ import {
   Search,
   Type,
   Maximize2,
+  Minimize2,
   Trash2,
   Settings,
   Sparkles,
   Headphones,
   FileText,
   List,
-  X
+  X,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { Book, ReadingProgress, Bookmark as BookmarkType, HighlightAndNote, User } from "../types";
 import { askGeminiAssistant } from "../lib/api";
@@ -35,9 +38,10 @@ interface ReaderProps {
   onUpdateProgress: (page: number, readingSeconds?: number) => void;
   progress: ReadingProgress | null;
   onTriggerPaywall: (reason: "highlights") => void;
+  onUpdateUser?: (updatedUser: User) => void;
 }
 
-type ReaderTheme = "claro" | "sepia" | "escuro";
+type ReaderTheme = "claro" | "sepia" | "escuro" | "auto";
 
 export default function Reader({
   book,
@@ -48,10 +52,14 @@ export default function Reader({
   onUpdateProgress,
   progress,
   onTriggerPaywall,
+  onUpdateUser,
 }: ReaderProps) {
   const premium = isUserPremium(user);
   const [currentPage, setCurrentPage] = useState(progress?.lastPage || 0);
-  const [theme, setTheme] = useState<ReaderTheme>("escuro");
+  const [theme, setTheme] = useState<ReaderTheme>(() => {
+    return (user?.preferences?.theme as ReaderTheme) || "escuro";
+  });
+  const [isFocusMode, setIsFocusMode] = useState(false);
   const [fontSize, setFontSize] = useState(1.1); // in rem
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [notes, setNotes] = useState<HighlightAndNote[]>([]);
@@ -60,6 +68,21 @@ export default function Reader({
   const [activeSidebarTab, setActiveSidebarTab] = useState<"companion" | "notes" | "search" | "reviews">("companion");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ page: number; snippet: string }[]>([]);
+
+  // Dynamically resolve theme based on "auto" option (time of day)
+  const getResolvedTheme = (t: ReaderTheme): "claro" | "sepia" | "escuro" => {
+    if (t !== "auto") return t;
+    const hour = new Date().getHours();
+    if (hour >= 7 && hour < 18) {
+      return "claro";
+    } else if (hour >= 18 && hour < 21) {
+      return "sepia";
+    } else {
+      return "escuro";
+    }
+  };
+
+  const resolvedTheme = getResolvedTheme(theme);
   
   // Timer to track exact active reading time (in seconds) on the current page
   const timeSpentRef = useRef<number>(0);
@@ -70,6 +93,62 @@ export default function Reader({
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Listen to keyboard shortcuts and page turning
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && (
+        activeEl.tagName === "INPUT" ||
+        activeEl.tagName === "TEXTAREA" ||
+        activeEl.getAttribute("contenteditable") === "true"
+      );
+      
+      if (isTyping) return;
+      
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        setIsFocusMode((prev) => !prev);
+      } else if (e.key === "Escape" && isFocusMode) {
+        e.preventDefault();
+        setIsFocusMode(false);
+      } else if (e.key === "ArrowRight" || e.key === "PageDown") {
+        if (currentPage < book.pages - 1) {
+          e.preventDefault();
+          handlePageChange(currentPage + 1);
+        }
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        if (currentPage > 0) {
+          e.preventDefault();
+          handlePageChange(currentPage - 1);
+        }
+      }
+    };
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentPage, isFocusMode, book.pages]);
+
+  const handleThemeChange = async (newTheme: ReaderTheme) => {
+    setTheme(newTheme);
+    if (userId) {
+      try {
+        const { updateUserProfile } = await import("../lib/api");
+        const currentPrefs = user?.preferences || {};
+        const updatedUser = await updateUserProfile(userId, {
+          preferences: {
+            ...currentPrefs,
+            theme: newTheme,
+          }
+        });
+        if (onUpdateUser) {
+          onUpdateUser(updatedUser);
+        }
+      } catch (err) {
+        console.error("Erro ao atualizar tema nas preferências:", err);
+      }
+    }
+  };
   
   // Highlight draft state
   const [selectedText, setSelectedText] = useState("");
@@ -296,8 +375,7 @@ export default function Reader({
       textMuted: "text-zinc-500",
     },
   };
-
-  const activeTheme = themeStyles[theme];
+  const activeTheme = themeStyles[resolvedTheme];
 
   // Table of Contents summary handling
   const bookSummary = book.summary || [];
@@ -312,222 +390,323 @@ export default function Reader({
   }, -1);
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${activeTheme.outerBg} selection:bg-[#e2b874]/30`}>
-      {/* Top Navbar */}
-      <header className={`px-4 py-2.5 md:py-3 border-b flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 shadow-sm sticky top-0 z-20 transition-colors ${
-        theme === "escuro" 
-          ? "bg-[#121214] border-zinc-800 text-zinc-100" 
-          : theme === "sepia" 
-            ? "bg-[#fcf7e8] border-[#ebdcb3] text-[#4a3f28]" 
-            : "bg-white border-gray-200 text-gray-900"
-      }`}>
-        {/* Row 1 on mobile: Title & back button on left, quick controls on the right */}
-        <div className="flex items-center justify-between w-full md:w-auto gap-3 min-w-0">
-          <div className="flex items-center gap-3 min-w-0">
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${activeTheme.outerBg} selection:bg-[#e2b874]/30 relative`}>
+      {/* Subtle floating escape focus button when in Focus Mode */}
+      {isFocusMode && (
+        <>
+          <div className="absolute top-4 right-4 z-50 group">
             <button
-              onClick={handleBackToLibrary}
-              className={`p-2 rounded-xl transition cursor-pointer flex-shrink-0 ${
-                theme === "escuro" ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100" : "hover:bg-gray-100 text-gray-600"
+              onClick={() => setIsFocusMode(false)}
+              className={`p-2 rounded-xl transition duration-200 cursor-pointer shadow-md opacity-30 hover:opacity-100 ${
+                resolvedTheme === "escuro" 
+                  ? "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white" 
+                  : "bg-white border border-gray-200 text-gray-600 hover:text-gray-900"
               }`}
-              title="Voltar para Biblioteca"
+              title="Sair do Modo Foco (F)"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <Minimize2 className="w-4 h-4" />
             </button>
-            
-            <div className="min-w-0">
-              <h2 className={`text-xs md:text-sm font-serif font-bold truncate ${theme === "escuro" ? "text-zinc-100" : "text-gray-900"}`}>{book.title}</h2>
-              <p className={`text-[9px] md:text-[10px] truncate ${theme === "escuro" ? "text-zinc-500" : "text-gray-500"}`}>{book.author}</p>
+            <span className={`absolute right-10 top-1.5 text-[10px] font-bold whitespace-nowrap px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition shadow border ${
+              resolvedTheme === "escuro" 
+                ? "bg-zinc-950 border-zinc-850 text-zinc-400" 
+                : "bg-white border-gray-100 text-gray-500"
+            }`}>
+              Sair do Modo Foco (F)
+            </span>
+          </div>
+
+          {/* Floating side-navigation arrows in Focus Mode */}
+          {currentPage > 0 && (
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              className={`absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full transition duration-200 cursor-pointer shadow-lg z-30 opacity-20 hover:opacity-100 ${
+                resolvedTheme === "escuro" 
+                  ? "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white" 
+                  : "bg-white border border-gray-200 text-gray-600 hover:text-gray-900"
+              }`}
+              title="Página Anterior (←)"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          )}
+          {currentPage < book.pages - 1 && (
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              className={`absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full transition duration-200 cursor-pointer shadow-lg z-30 opacity-20 hover:opacity-100 ${
+                resolvedTheme === "escuro" 
+                  ? "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white" 
+                  : "bg-white border border-gray-200 text-gray-600 hover:text-gray-900"
+              }`}
+              title="Próxima Página (→)"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          )}
+          
+          {/* Floating page indicator at the bottom center in Focus Mode */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+            <span className={`text-[10px] font-bold font-mono px-3 py-1.5 rounded-full shadow border transition-opacity duration-300 ${
+              resolvedTheme === "escuro" 
+                ? "bg-zinc-900 border-zinc-800 text-zinc-400" 
+                : "bg-white border-gray-200 text-gray-500"
+            }`}>
+              Página {currentPage + 1} de {book.pages}
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* Top Navbar */}
+      {!isFocusMode && (
+        <header className={`px-4 py-2.5 md:py-3 border-b flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 shadow-sm sticky top-0 z-20 transition-colors ${
+          resolvedTheme === "escuro" 
+            ? "bg-[#121214] border-zinc-800 text-zinc-100" 
+            : resolvedTheme === "sepia" 
+              ? "bg-[#fcf7e8] border-[#ebdcb3] text-[#4a3f28]" 
+              : "bg-white border-gray-200 text-gray-900"
+        }`}>
+          {/* Row 1 on mobile: Title & back button on left, quick controls on the right */}
+          <div className="flex items-center justify-between w-full md:w-auto gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={handleBackToLibrary}
+                className={`p-2 rounded-xl transition cursor-pointer flex-shrink-0 ${
+                  resolvedTheme === "escuro" ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100" : "hover:bg-gray-100 text-gray-600"
+                }`}
+                title="Voltar para Biblioteca"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              
+              <div className="min-w-0">
+                <h2 className={`text-xs md:text-sm font-serif font-bold truncate ${resolvedTheme === "escuro" ? "text-zinc-100" : "text-gray-900"}`}>{book.title}</h2>
+                <p className={`text-[9px] md:text-[10px] truncate ${resolvedTheme === "escuro" ? "text-zinc-500" : "text-gray-500"}`}>{book.author}</p>
+              </div>
+            </div>
+
+            {/* Quick Panels on the right (MOBILE ONLY) */}
+            <div className="flex md:hidden items-center gap-1 flex-shrink-0">
+              {book.audiobookAvailable && (
+                <button
+                  onClick={onOpenAudiobook}
+                  className={`p-1.5 rounded-lg flex items-center gap-1 text-[10px] font-semibold transition cursor-pointer ${
+                    resolvedTheme === "escuro" 
+                      ? "bg-[#e2b874]/10 hover:bg-[#e2b874]/25 text-[#e2b874]" 
+                      : "bg-[#8a7e58]/10 hover:bg-[#8a7e58]/20 text-[#8a7e58]"
+                  }`}
+                  title="Ouvir Audiobook"
+                >
+                  <Headphones className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Audio</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleToggleBookmark}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isCurrentPageBookmarked
+                    ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                    : resolvedTheme === "escuro" 
+                      ? "text-zinc-500 hover:bg-zinc-850 hover:text-zinc-300" 
+                      : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                }`}
+                title={isCurrentPageBookmarked ? "Remover marcador" : "Marcar página"}
+              >
+                <Bookmark className={`w-4 h-4 ${isCurrentPageBookmarked ? "fill-red-500" : ""}`} />
+              </button>
+
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isSidebarOpen 
+                    ? resolvedTheme === "escuro" 
+                      ? "bg-zinc-800 text-zinc-100" 
+                      : "bg-gray-100 text-gray-850" 
+                    : resolvedTheme === "escuro" 
+                      ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
+                      : "text-gray-500 hover:bg-gray-100"
+                }`}
+                title="Marcadores e Notas"
+              >
+                <BookMarked className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setIsTocOpen(!isTocOpen)}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isTocOpen 
+                    ? resolvedTheme === "escuro" 
+                      ? "bg-zinc-800 text-zinc-100" 
+                      : "bg-gray-100 text-gray-850" 
+                    : resolvedTheme === "escuro" 
+                      ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
+                      : "text-gray-500 hover:bg-gray-100"
+                }`}
+                title="Sumário"
+              >
+                <List className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setIsFocusMode(!isFocusMode)}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isFocusMode 
+                    ? resolvedTheme === "escuro" 
+                      ? "bg-zinc-800 text-[#e2b874]" 
+                      : "bg-gray-100 text-[#8a7e58]" 
+                    : resolvedTheme === "escuro" 
+                      ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
+                      : "text-gray-500 hover:bg-gray-100"
+                }`}
+                title="Modo Foco (F)"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          {/* Quick Panels on the right (MOBILE ONLY) */}
-          <div className="flex md:hidden items-center gap-1 flex-shrink-0">
+          {/* Central Controls: Font Sizes & Theme selection (Row 2 on mobile, Center on desktop) */}
+          <div className="flex items-center justify-center md:justify-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto">
+            {/* Font Sizes controls */}
+            <div className={`flex rounded-xl p-1 items-center border ${
+              resolvedTheme === "escuro" ? "bg-zinc-900 border-zinc-800" : "bg-gray-50 border-gray-200"
+            }`}>
+              <button
+                onClick={() => setFontSize(Math.max(0.8, fontSize - 0.1))}
+                className={`p-1 px-2.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  resolvedTheme === "escuro" ? "hover:bg-zinc-850 text-zinc-300" : "hover:bg-white text-gray-700"
+                }`}
+                title="Diminuir texto"
+              >
+                A-
+              </button>
+              <div className={`w-px h-4 mx-1 ${resolvedTheme === "escuro" ? "bg-zinc-800" : "bg-gray-200"}`}></div>
+              <button
+                onClick={() => setFontSize(Math.min(2.0, fontSize + 0.1))}
+                className={`p-1 px-2.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  resolvedTheme === "escuro" ? "hover:bg-zinc-850 text-zinc-300" : "hover:bg-white text-gray-700"
+                }`}
+                title="Aumentar texto"
+              >
+                A+
+              </button>
+            </div>
+
+            {/* Reading Themes Toggles */}
+            <div className={`flex rounded-xl p-1 items-center border gap-1 ${
+              resolvedTheme === "escuro" ? "bg-zinc-900 border-zinc-800" : "bg-gray-50 border-gray-200"
+            }`}>
+              {(["claro", "sepia", "escuro", "auto"] as ReaderTheme[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => handleThemeChange(t)}
+                  className={`p-1 px-1.5 sm:px-2.5 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer flex items-center gap-1.5 ${
+                    theme === t 
+                      ? resolvedTheme === "escuro" 
+                        ? "bg-zinc-800 text-zinc-100 shadow-sm border border-zinc-700" 
+                        : resolvedTheme === "sepia" 
+                          ? "bg-[#fcf7e8] text-[#4a3f28] shadow-sm border border-[#ebdcb3]" 
+                          : "bg-white text-gray-900 shadow-sm border border-gray-200"
+                      : resolvedTheme === "escuro" 
+                        ? "text-zinc-500 hover:text-zinc-350 hover:bg-zinc-800/20" 
+                        : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-250/30"
+                  }`}
+                  title={t === "auto" ? "Tema Automático (baseado no horário)" : `Tema ${t}`}
+                >
+                  {/* Visual colored circle representing the theme */}
+                  <span className={`w-3 h-3 rounded-full border border-black/10 flex-shrink-0 ${
+                    t === "claro" ? "bg-white" : t === "sepia" ? "bg-[#f4ebd0]" : t === "escuro" ? "bg-zinc-950" : "bg-gradient-to-tr from-zinc-950 via-[#ebdcb3] to-white"
+                  }`} />
+                  <span className="hidden sm:inline">{t === "auto" ? "Auto" : t}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick panels toggles (DESKTOP ONLY) */}
+          <div className="hidden md:flex items-center gap-1.5">
             {book.audiobookAvailable && (
               <button
                 onClick={onOpenAudiobook}
-                className={`p-1.5 rounded-lg flex items-center gap-1 text-[10px] font-semibold transition cursor-pointer ${
-                  theme === "escuro" 
+                className={`p-2 rounded-xl flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer ${
+                  resolvedTheme === "escuro" 
                     ? "bg-[#e2b874]/10 hover:bg-[#e2b874]/25 text-[#e2b874]" 
                     : "bg-[#8a7e58]/10 hover:bg-[#8a7e58]/20 text-[#8a7e58]"
                 }`}
                 title="Ouvir Audiobook"
               >
-                <Headphones className="w-3.5 h-3.5 animate-pulse" />
-                <span>Audio</span>
+                <Headphones className="w-4 h-4 animate-pulse" />
+                <span className="hidden sm:inline">Audiobook</span>
               </button>
             )}
 
             <button
               onClick={handleToggleBookmark}
-              className={`p-1.5 rounded-lg transition cursor-pointer ${
+              className={`p-2 rounded-xl transition cursor-pointer ${
                 isCurrentPageBookmarked
                   ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
-                  : theme === "escuro" 
+                  : resolvedTheme === "escuro" 
                     ? "text-zinc-500 hover:bg-zinc-850 hover:text-zinc-300" 
                     : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               }`}
-              title={isCurrentPageBookmarked ? "Remover marcador" : "Marcar página"}
+              title={isCurrentPageBookmarked ? "Remover marcador desta página" : "Marcar esta página"}
             >
-              <Bookmark className={`w-4 h-4 ${isCurrentPageBookmarked ? "fill-red-500" : ""}`} />
+              <Bookmark className={`w-5 h-5 ${isCurrentPageBookmarked ? "fill-red-500" : ""}`} />
             </button>
 
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className={`p-1.5 rounded-lg transition cursor-pointer ${
+              className={`p-2 rounded-xl transition cursor-pointer ${
                 isSidebarOpen 
-                  ? theme === "escuro" 
+                  ? resolvedTheme === "escuro" 
                     ? "bg-zinc-800 text-zinc-100" 
                     : "bg-gray-100 text-gray-850" 
-                  : theme === "escuro" 
+                  : resolvedTheme === "escuro" 
                     ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
                     : "text-gray-500 hover:bg-gray-100"
               }`}
               title="Marcadores e Notas"
             >
-              <BookMarked className="w-4 h-4" />
+              <BookMarked className="w-5 h-5" />
             </button>
 
             <button
               onClick={() => setIsTocOpen(!isTocOpen)}
-              className={`p-1.5 rounded-lg transition cursor-pointer ${
+              className={`p-2 rounded-xl transition cursor-pointer ${
                 isTocOpen 
-                  ? theme === "escuro" 
+                  ? resolvedTheme === "escuro" 
                     ? "bg-zinc-800 text-zinc-100" 
                     : "bg-gray-100 text-gray-850" 
-                  : theme === "escuro" 
+                  : resolvedTheme === "escuro" 
                     ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
                     : "text-gray-500 hover:bg-gray-100"
               }`}
               title="Sumário"
             >
-              <List className="w-4 h-4" />
+              <List className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={() => setIsFocusMode(!isFocusMode)}
+              className={`p-2 rounded-xl transition cursor-pointer ${
+                isFocusMode 
+                  ? resolvedTheme === "escuro" 
+                    ? "bg-zinc-800 text-[#e2b874]" 
+                    : "bg-gray-100 text-[#8a7e58]" 
+                  : resolvedTheme === "escuro" 
+                    ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
+                    : "text-gray-500 hover:bg-gray-100"
+              }`}
+              title="Modo Foco (F)"
+            >
+              <Eye className="w-5 h-5" />
             </button>
           </div>
-        </div>
-
-        {/* Central Controls: Font Sizes & Theme selection (Row 2 on mobile, Center on desktop) */}
-        <div className="flex items-center justify-center md:justify-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto">
-          {/* Font Sizes controls */}
-          <div className={`flex rounded-xl p-1 items-center border ${
-            theme === "escuro" ? "bg-zinc-900 border-zinc-800" : "bg-gray-50 border-gray-200"
-          }`}>
-            <button
-              onClick={() => setFontSize(Math.max(0.8, fontSize - 0.1))}
-              className={`p-1 px-2.5 text-xs font-bold rounded-lg transition cursor-pointer ${
-                theme === "escuro" ? "hover:bg-zinc-850 text-zinc-300" : "hover:bg-white text-gray-700"
-              }`}
-              title="Diminuir texto"
-            >
-              A-
-            </button>
-            <div className={`w-px h-4 mx-1 ${theme === "escuro" ? "bg-zinc-800" : "bg-gray-200"}`}></div>
-            <button
-              onClick={() => setFontSize(Math.min(2.0, fontSize + 0.1))}
-              className={`p-1 px-2.5 text-xs font-bold rounded-lg transition cursor-pointer ${
-                theme === "escuro" ? "hover:bg-zinc-850 text-zinc-300" : "hover:bg-white text-gray-700"
-              }`}
-              title="Aumentar texto"
-            >
-              A+
-            </button>
-          </div>
-
-          {/* Reading Themes Toggles */}
-          <div className={`flex rounded-xl p-1 items-center border gap-1 ${
-            theme === "escuro" ? "bg-zinc-900 border-zinc-800" : "bg-gray-50 border-gray-200"
-          }`}>
-            {(["claro", "sepia", "escuro"] as ReaderTheme[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTheme(t)}
-                className={`p-1 px-1.5 sm:px-2.5 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer flex items-center gap-1.5 ${
-                  theme === t 
-                    ? theme === "escuro" 
-                      ? "bg-zinc-800 text-zinc-100 shadow-sm border border-zinc-700" 
-                      : theme === "sepia" 
-                        ? "bg-[#fcf7e8] text-[#4a3f28] shadow-sm border border-[#ebdcb3]" 
-                        : "bg-white text-gray-900 shadow-sm border border-gray-200"
-                    : "text-zinc-500 hover:text-zinc-350 hover:bg-zinc-800/10"
-                }`}
-                title={`Tema ${t}`}
-              >
-                {/* Visual colored circle representing the theme */}
-                <span className={`w-3 h-3 rounded-full border border-black/10 flex-shrink-0 ${
-                  t === "claro" ? "bg-white" : t === "sepia" ? "bg-[#f4ebd0]" : "bg-zinc-950"
-                }`} />
-                <span className="hidden sm:inline">{t}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Quick panels toggles (DESKTOP ONLY) */}
-        <div className="hidden md:flex items-center gap-1.5">
-          {book.audiobookAvailable && (
-            <button
-              onClick={onOpenAudiobook}
-              className={`p-2 rounded-xl flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer ${
-                theme === "escuro" 
-                  ? "bg-[#e2b874]/10 hover:bg-[#e2b874]/25 text-[#e2b874]" 
-                  : "bg-[#8a7e58]/10 hover:bg-[#8a7e58]/20 text-[#8a7e58]"
-              }`}
-              title="Ouvir Audiobook"
-            >
-              <Headphones className="w-4 h-4 animate-pulse" />
-              <span className="hidden sm:inline">Audiobook</span>
-            </button>
-          )}
-
-          <button
-            onClick={handleToggleBookmark}
-            className={`p-2 rounded-xl transition cursor-pointer ${
-              isCurrentPageBookmarked
-                ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
-                : theme === "escuro" 
-                  ? "text-zinc-500 hover:bg-zinc-850 hover:text-zinc-300" 
-                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-            }`}
-            title={isCurrentPageBookmarked ? "Remover marcador desta página" : "Marcar esta página"}
-          >
-            <Bookmark className={`w-5 h-5 ${isCurrentPageBookmarked ? "fill-red-500" : ""}`} />
-          </button>
-
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className={`p-2 rounded-xl transition cursor-pointer ${
-              isSidebarOpen 
-                ? theme === "escuro" 
-                  ? "bg-zinc-800 text-zinc-100" 
-                  : "bg-gray-100 text-gray-850" 
-                : theme === "escuro" 
-                  ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
-                  : "text-gray-500 hover:bg-gray-100"
-            }`}
-            title="Marcadores e Notas"
-          >
-            <BookMarked className="w-5 h-5" />
-          </button>
-
-          <button
-            onClick={() => setIsTocOpen(!isTocOpen)}
-            className={`p-2 rounded-xl transition cursor-pointer ${
-              isTocOpen 
-                ? theme === "escuro" 
-                  ? "bg-zinc-800 text-zinc-100" 
-                  : "bg-gray-100 text-gray-850" 
-                : theme === "escuro" 
-                  ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200" 
-                  : "text-gray-500 hover:bg-gray-100"
-            }`}
-            title="Sumário"
-          >
-            <List className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Main split viewport layout */}
-      <div className="flex-grow flex relative overflow-hidden h-[calc(100vh-53px)]">
+      <div className={`flex-grow flex relative overflow-hidden ${isFocusMode ? "h-screen" : "h-[calc(100vh-53px)]"}`}>
         {/* E-book reader core body */}
         <div className="flex-grow flex flex-col justify-between p-4 md:p-8 overflow-y-auto" onMouseUp={handleTextSelection}>
           <div className="max-w-2xl mx-auto w-full my-auto">
@@ -549,21 +728,21 @@ export default function Reader({
                     components={{
                       h1: ({ children }) => (
                         <h1 className={`font-serif font-bold text-2xl md:text-3xl mb-6 tracking-tight pb-3 border-b border-dashed ${
-                          theme === "escuro" ? "text-[#e2b874] border-zinc-800" : theme === "sepia" ? "text-[#544830] border-[#ebdcb3]" : "text-gray-900 border-gray-200"
+                          resolvedTheme === "escuro" ? "text-[#e2b874] border-zinc-800" : resolvedTheme === "sepia" ? "text-[#544830] border-[#ebdcb3]" : "text-gray-900 border-gray-200"
                         }`}>
                           {children}
                         </h1>
                       ),
                       h2: ({ children }) => (
                         <h2 className={`font-serif font-bold text-lg md:text-xl mt-8 mb-4 tracking-tight ${
-                          theme === "escuro" ? "text-zinc-100" : theme === "sepia" ? "text-[#544830]" : "text-gray-800"
+                          resolvedTheme === "escuro" ? "text-zinc-100" : resolvedTheme === "sepia" ? "text-[#544830]" : "text-gray-800"
                         }`}>
                           {children}
                         </h2>
                       ),
                       h3: ({ children }) => (
                         <h3 className={`font-serif font-semibold text-base md:text-lg mt-6 mb-3 ${
-                          theme === "escuro" ? "text-zinc-200" : theme === "sepia" ? "text-[#695d46]" : "text-gray-700"
+                          resolvedTheme === "escuro" ? "text-zinc-200" : resolvedTheme === "sepia" ? "text-[#695d46]" : "text-gray-700"
                         }`}>
                           {children}
                         </h3>
@@ -587,7 +766,7 @@ export default function Reader({
                       },
                       strong: ({ children }) => (
                         <strong className={`font-bold ${
-                          theme === "escuro" ? "text-[#e2b874]" : theme === "sepia" ? "text-[#8a7e58]" : "text-gray-900"
+                          resolvedTheme === "escuro" ? "text-[#e2b874]" : resolvedTheme === "sepia" ? "text-[#8a7e58]" : "text-gray-900"
                         }`}>
                           {children}
                         </strong>
@@ -599,9 +778,9 @@ export default function Reader({
                       ),
                       blockquote: ({ children }) => (
                         <blockquote className={`pl-4 py-1.5 border-l-4 my-6 italic text-sm md:text-base rounded-r-lg ${
-                          theme === "escuro"
+                          resolvedTheme === "escuro"
                             ? "border-[#e2b874] bg-[#e2b874]/5 text-zinc-300"
-                            : theme === "sepia"
+                            : resolvedTheme === "sepia"
                               ? "border-[#8a7e58] bg-[#8a7e58]/5 text-[#695c42]"
                               : "border-[#8a7e58] bg-gray-50 text-gray-700"
                         }`}>
@@ -625,7 +804,7 @@ export default function Reader({
                       ),
                       hr: () => (
                         <hr className={`my-8 border-t ${
-                          theme === "escuro" ? "border-zinc-800" : theme === "sepia" ? "border-[#ebdcb3]" : "border-gray-200"
+                          resolvedTheme === "escuro" ? "border-zinc-800" : resolvedTheme === "sepia" ? "border-[#ebdcb3]" : "border-gray-200"
                         }`} />
                       ),
                       a: ({ children, href }) => {
@@ -829,37 +1008,39 @@ export default function Reader({
           </div>
 
           {/* Reader Footer Page Navigator bar */}
-          <footer className="max-w-xl mx-auto w-full mt-4 flex items-center justify-between">
-            <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 0}
-              className={`p-2 border rounded-xl transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs font-semibold ${
-                theme === "escuro" 
-                  ? "border-zinc-805 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white" 
-                  : "border-[#dad5bf] bg-gray-50 text-gray-700 hover:bg-white"
-              }`}
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Anterior
-            </button>
+          {!isFocusMode && (
+            <footer className="max-w-xl mx-auto w-full mt-4 flex items-center justify-between">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 0}
+                className={`p-2 border rounded-xl transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs font-semibold ${
+                  resolvedTheme === "escuro" 
+                    ? "border-zinc-805 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white" 
+                    : "border-[#dad5bf] bg-gray-50 text-gray-700 hover:bg-white"
+                }`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </button>
 
-            <span className={`text-xs font-bold font-mono ${activeTheme.textMuted}`}>
-              Página {currentPage + 1} de {book.pages}
-            </span>
+              <span className={`text-xs font-bold font-mono ${activeTheme.textMuted}`}>
+                Página {currentPage + 1} de {book.pages}
+              </span>
 
-            <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === book.pages - 1}
-              className={`p-2 border rounded-xl transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs font-semibold ${
-                theme === "escuro" 
-                  ? "border-zinc-805 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white" 
-                  : "border-[#dad5bf] bg-gray-50 text-gray-700 hover:bg-white"
-              }`}
-            >
-              Próxima
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </footer>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === book.pages - 1}
+                className={`p-2 border rounded-xl transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs font-semibold ${
+                  resolvedTheme === "escuro" 
+                    ? "border-zinc-805 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white" 
+                    : "border-[#dad5bf] bg-gray-50 text-gray-700 hover:bg-white"
+                }`}
+              >
+                Próxima
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </footer>
+          )}
         </div>
 
         {/* Dynamic Sidebar Right: Highlights, Bookmarks, and Gemini AI Reading Companion! */}

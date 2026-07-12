@@ -148,7 +148,7 @@ export default function AdminPanel({ books, onBackToLibrary, onRefreshBooks, cur
   };
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'books' | 'users' | 'reports' | 'logs' | 'dashboard' | 'notifications' | 'ai' | 'saas' | 'rules'>('books');
+  const [activeTab, setActiveTab] = useState<'books' | 'users' | 'reports' | 'logs' | 'dashboard' | 'notifications' | 'ai' | 'saas' | 'rules' | 'support'>('books');
 
   // Rules & Conversion Tab States
   const [selectedRulesDoc, setSelectedRulesDoc] = useState<'firestore' | 'markdown' | 'conversion'>('firestore');
@@ -277,6 +277,10 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
   ]);
   const [aiChatInput, setAiChatInput] = useState("");
   const [isAiChatLoading, setIsAiChatLoading] = useState(false);
+
+  // Support Tickets States
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
 
   // Core Dialog States
   const [isAdding, setIsAdding] = useState(false);
@@ -533,6 +537,14 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
         } catch (dupsErr) {
           console.error("Error loading duplicates:", dupsErr);
         }
+      } else if (activeTab === 'support') {
+        try {
+          const res = await fetch("/api/support/tickets");
+          const data = await res.json();
+          setSupportTickets(data);
+        } catch (sErr) {
+          console.error("Error loading support tickets:", sErr);
+        }
       }
     } catch (err: any) {
       setError(err.message || "Erro ao carregar dados administrativos");
@@ -545,6 +557,20 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
   const triggerSuccess = (msg: string) => {
     setSuccessMsg(msg);
     setTimeout(() => setSuccessMsg(""), 4000);
+  };
+
+  const handleResolveTicket = async (id: string) => {
+    try {
+      const res = await fetch(`/api/support/tickets/${id}/resolve`, {
+        method: "POST"
+      });
+      const data = await res.json();
+      setSupportTickets(data);
+      triggerSuccess("Chamado de suporte marcado como resolvido.");
+    } catch (err) {
+      console.error("Error resolving support ticket:", err);
+      setError("Não foi possível marcar o chamado como resolvido.");
+    }
   };
 
   // AI Actions and Handlers
@@ -1371,6 +1397,18 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
         >
           <Database className="w-4 h-4" />
           Regras & Conversão
+        </button>
+
+        <button
+          onClick={() => setActiveTab('support')}
+          className={`flex items-center gap-2 px-5 py-3 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'support'
+              ? "border-amber-500 text-amber-600"
+              : "border-transparent text-gray-500 hover:text-gray-800"
+          }`}
+        >
+          <HelpCircle className="w-4 h-4" />
+          Chamados de Suporte
         </button>
       </div>
 
@@ -4223,6 +4261,120 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 9: CHAMADOS DE SUPORTE */}
+        {activeTab === 'support' && (
+          <div className="space-y-6 text-left animate-fadeIn" id="tab-support-tickets">
+            <div className="bg-gradient-to-br from-zinc-50 to-zinc-100 border border-zinc-200 rounded-3xl p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5 text-zinc-600" />
+                  <span className="text-[10px] text-zinc-800 bg-zinc-200 px-2 py-0.5 rounded-full font-mono font-bold uppercase tracking-wider">Suporte Técnico</span>
+                </div>
+                <h2 className="text-2xl font-serif font-bold text-gray-900">Gerenciamento de Suporte</h2>
+                <p className="text-xs text-gray-500 max-w-2xl">
+                  Acompanhe e responda dúvidas, sugestões e solicitações enviadas diretamente pelos leitores da plataforma.
+                </p>
+              </div>
+            </div>
+
+            {/* Support Statistics cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white border border-[#ece9dc] p-5 rounded-2xl shadow-xs">
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Total de Chamados</span>
+                <span className="text-2xl font-serif font-bold text-gray-900 mt-1 block">{supportTickets.length}</span>
+              </div>
+              <div className="bg-white border border-[#ece9dc] p-5 rounded-2xl shadow-xs">
+                <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block">Em Aberto</span>
+                <span className="text-2xl font-serif font-bold text-amber-600 mt-1 block">
+                  {supportTickets.filter(t => t.status === "Aberto").length}
+                </span>
+              </div>
+              <div className="bg-white border border-[#ece9dc] p-5 rounded-2xl shadow-xs">
+                <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider block">Resolvidos</span>
+                <span className="text-2xl font-serif font-bold text-emerald-600 mt-1 block">
+                  {supportTickets.filter(t => t.status === "Resolvido").length}
+                </span>
+              </div>
+            </div>
+
+            {/* Tickets table or card deck */}
+            <div className="bg-white border border-[#ece9dc] rounded-3xl overflow-hidden shadow-sm">
+              <div className="p-6 border-b border-[#ece9dc] flex justify-between items-center bg-gray-50/50">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Fila de Chamados Recentes</h3>
+                <button
+                  onClick={async () => {
+                    const res = await fetch("/api/support/tickets");
+                    const data = await res.json();
+                    setSupportTickets(data);
+                  }}
+                  className="text-[11px] text-[#8a7e58] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Atualizar Lista
+                </button>
+              </div>
+
+              {supportTickets.length === 0 ? (
+                <div className="p-12 text-center text-gray-400">
+                  <HelpCircle className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                  <p className="text-xs font-bold uppercase tracking-wider">Nenhum chamado de suporte encontrado</p>
+                  <p className="text-[11px] text-gray-500 mt-1">Dúvidas enviadas por usuários serão exibidas nesta fila.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#ece9dc]">
+                  {supportTickets.map((ticket) => (
+                    <div key={ticket.id} className="p-6 hover:bg-gray-50/40 transition flex flex-col md:flex-row items-start justify-between gap-4">
+                      <div className="space-y-2 max-w-3xl">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            ticket.status === "Aberto" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                          }`}>
+                            {ticket.status}
+                          </span>
+                          <span className="text-xs font-bold text-gray-750 font-serif">{ticket.subject}</span>
+                          <span className="text-[10px] text-gray-400 font-mono">ID: {ticket.id}</span>
+                        </div>
+
+                        <p className="text-xs text-gray-650 bg-gray-50 p-3 rounded-xl border border-gray-100 leading-relaxed">
+                          {ticket.message}
+                        </p>
+
+                        <div className="flex items-center gap-4 text-[10px] text-gray-400">
+                          <div>
+                            <span className="font-semibold text-gray-500">Remetente:</span> {ticket.name} ({ticket.email})
+                          </div>
+                          <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                          <div>
+                            <span className="font-semibold text-gray-500">Data:</span> {new Date(ticket.createdAt).toLocaleString("pt-BR")}
+                          </div>
+                          {ticket.userId && (
+                            <>
+                              <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                              <div>
+                                <span className="font-semibold text-gray-500">Usuário ID:</span> {ticket.userId}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {ticket.status === "Aberto" && (
+                        <button
+                          onClick={() => handleResolveTicket(ticket.id)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3.5 rounded-xl text-xs transition cursor-pointer flex-shrink-0 flex items-center gap-1.5 active:scale-95 shadow-sm"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Marcar Resolvido
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
