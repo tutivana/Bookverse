@@ -26,6 +26,7 @@ import { Book, ReadingProgress, Bookmark as BookmarkType, HighlightAndNote, User
 import { askGeminiAssistant } from "../lib/api";
 import BookReviews from "./BookReviews";
 import { isUserPremium } from "../lib/subscription";
+import { useAdManager } from "./AdManager";
 import { Lock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -81,6 +82,7 @@ export default function Reader({
   onUpdateUser,
 }: ReaderProps) {
   const premium = isUserPremium(user);
+  const { triggerInterstitialAd } = useAdManager();
   const [currentPage, setCurrentPage] = useState(progress?.lastPage || 0);
   const [theme, setTheme] = useState<ReaderTheme>(() => {
     return (user?.preferences?.theme as ReaderTheme) || "escuro";
@@ -344,37 +346,51 @@ export default function Reader({
   // Handle page turn and trigger parent progress update with exact reading seconds
   const handlePageChange = (newPage: number) => {
     if (newPage >= 0 && newPage < book.pages) {
-      // Save current scroll position before page change
-      if (readerScrollContainerRef.current) {
-        pageScrollPositionsRef.current[currentPage] = readerScrollContainerRef.current.scrollTop;
-      }
+      const isNextPageAChapter = book.summary && book.summary.some(item => item.page === newPage);
+      const isMovingForward = newPage > currentPage;
 
-      const elapsed = timeSpentRef.current;
-      timeSpentRef.current = 0; // Reset for the next page
-      
-      const hasVisited = visitedPages.includes(newPage);
-
-      setCurrentPage(newPage);
-      onUpdateProgress(newPage, elapsed);
-      // Clean selected text draft
-      setSelectedText("");
-      setShowHighlightForm(false);
-      setAiResponse("");
-
-      if (!hasVisited) {
-        setVisitedPages((prev) => [...prev, newPage]);
-      }
-
-      // Restore scroll position
-      setTimeout(() => {
+      const proceedPageChange = () => {
+        // Save current scroll position before page change
         if (readerScrollContainerRef.current) {
-          if (hasVisited) {
-            readerScrollContainerRef.current.scrollTop = pageScrollPositionsRef.current[newPage] || 0;
-          } else {
-            readerScrollContainerRef.current.scrollTop = 0;
-          }
+          pageScrollPositionsRef.current[currentPage] = readerScrollContainerRef.current.scrollTop;
         }
-      }, 50);
+
+        const elapsed = timeSpentRef.current;
+        timeSpentRef.current = 0; // Reset for the next page
+        
+        const hasVisited = visitedPages.includes(newPage);
+
+        setCurrentPage(newPage);
+        onUpdateProgress(newPage, elapsed);
+        // Clean selected text draft
+        setSelectedText("");
+        setShowHighlightForm(false);
+        setAiResponse("");
+
+        if (!hasVisited) {
+          setVisitedPages((prev) => [...prev, newPage]);
+        }
+
+        // Restore scroll position
+        setTimeout(() => {
+          if (readerScrollContainerRef.current) {
+            if (hasVisited) {
+              readerScrollContainerRef.current.scrollTop = pageScrollPositionsRef.current[newPage] || 0;
+            } else {
+              readerScrollContainerRef.current.scrollTop = 0;
+            }
+          }
+        }, 50);
+      };
+
+      if (isMovingForward && isNextPageAChapter && !premium) {
+        const adShown = triggerInterstitialAd(proceedPageChange);
+        if (!adShown) {
+          proceedPageChange();
+        }
+      } else {
+        proceedPageChange();
+      }
     }
   };
 
@@ -430,7 +446,15 @@ export default function Reader({
     const elapsed = timeSpentRef.current;
     timeSpentRef.current = 0;
     onUpdateProgress(currentPage, elapsed);
-    onBackToLibrary();
+    
+    if (!premium) {
+      const adShown = triggerInterstitialAd(onBackToLibrary);
+      if (!adShown) {
+        onBackToLibrary();
+      }
+    } else {
+      onBackToLibrary();
+    }
   };
 
   // Toggle page bookmark

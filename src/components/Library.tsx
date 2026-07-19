@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "motion/react";
-import { Search, BookOpen, Headphones, Heart, Clock, Compass, Sparkles, Star, Plus, Shield, Lock } from "lucide-react";
+import { Search, BookOpen, Headphones, Heart, Clock, Compass, Sparkles, Star, Plus, Shield, Lock, Wifi, WifiOff, RefreshCw, Download } from "lucide-react";
 import { Book, ReadingProgress, ReadingStats, User } from "../types";
 import OfflineDownloadButton from "./OfflineDownloadButton";
 import { isUserPremium } from "../lib/subscription";
@@ -8,6 +8,9 @@ import BookDetailModal from "./BookDetailModal";
 import BookCard from "./BookCard";
 import BookSkeleton, { BookSkeletonLoader } from "./BookSkeleton";
 import { useBooks } from "./useBooks";
+import { NativeBookAd } from "./AdManager";
+import { getDownloadedBooks } from "../lib/offlineStore";
+import { syncUserData } from "../lib/syncEngine";
 
 interface LibraryProps {
   books: Book[];
@@ -57,6 +60,93 @@ export default function Library({
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedLanguage, setSelectedLanguage] = useState("Todos");
 
+  // Hybrid states
+  type LibraryState = "ONLINE_LOADING" | "ONLINE_SYNCING" | "OFFLINE_MODE" | "EMPTY_OFFLINE";
+  const [libraryState, setLibraryState] = useState<LibraryState>("ONLINE_LOADING");
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [downloadedBooks, setDownloadedBooks] = useState<Book[]>([]);
+  const [cachedBooks, setCachedBooks] = useState<Book[]>([]);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [activeLibraryTab, setActiveLibraryTab] = useState<"catalog" | "offline">("catalog");
+
+  // Monitor connection status
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Initial load of hybrid data
+  const loadHybridData = async () => {
+    try {
+      const downloaded = await getDownloadedBooks();
+      setDownloadedBooks(downloaded);
+
+      const cachedStr = localStorage.getItem("bookverse_catalog_cache");
+      let cached: Book[] = [];
+      if (cachedStr) {
+        cached = JSON.parse(cachedStr);
+        setCachedBooks(cached);
+      }
+
+      if (!isOnline) {
+        setActiveLibraryTab("offline");
+        if (downloaded.length > 0) {
+          setLibraryState("OFFLINE_MODE");
+        } else {
+          setLibraryState("EMPTY_OFFLINE");
+        }
+      } else {
+        if (cached.length > 0 || downloaded.length > 0) {
+          setLibraryState("ONLINE_SYNCING");
+          await syncWithFirestoreBackground(downloaded, cached);
+        } else {
+          setLibraryState("ONLINE_LOADING");
+          await syncWithFirestoreBackground(downloaded, []);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load initial hybrid data:", err);
+      if (isOnline) {
+        setLibraryState("ONLINE_LOADING");
+      } else {
+        setLibraryState("EMPTY_OFFLINE");
+      }
+    }
+  };
+
+  const syncWithFirestoreBackground = async (downloadedList: Book[], cachedList: Book[]) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch("/api/books");
+      if (res.ok) {
+        const data = await res.json();
+        const serverBooks = Array.isArray(data) ? data : (data.books || []);
+        if (serverBooks && serverBooks.length > 0) {
+          localStorage.setItem("bookverse_catalog_cache", JSON.stringify(serverBooks));
+          setCachedBooks(serverBooks);
+        }
+      }
+
+      if (user && user.id) {
+        await syncUserData(user.id, favorites);
+      }
+    } catch (err) {
+      console.warn("Background sync warning (using cached data):", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHybridData();
+  }, [isOnline, user?.id]);
+
   // Complete lists of standard categories and languages
   const standardCategories = [
     "Todas",
@@ -91,28 +181,30 @@ export default function Library({
   
   const categories = Array.from(new Set([
     ...standardCategories,
-    ...books.map((b) => b.category).filter(Boolean)
+    ...(isOnline && activeLibraryTab === "catalog" ? (books.length > 0 ? books : cachedBooks) : downloadedBooks).map((b) => b.category).filter(Boolean)
   ]));
 
   const standardLanguages = ["Todos", "Português", "Inglês", "Espanhol", "Francês", "Italiano", "Alemão"];
   const languages = Array.from(new Set([
     ...standardLanguages,
-    ...books.map((b) => b.language).filter(Boolean)
+    ...(isOnline && activeLibraryTab === "catalog" ? (books.length > 0 ? books : cachedBooks) : downloadedBooks).map((b) => b.language).filter(Boolean)
   ]));
 
   // Count helper functions for active books
   const getCategoryCount = (cat: string) => {
+    const listToCount = isOnline && activeLibraryTab === "catalog" ? (books.length > 0 ? books : cachedBooks) : downloadedBooks;
     if (cat === "Todas") {
-      return books.filter((b) => b.status === "Active" || !b.status).length;
+      return listToCount.filter((b) => b.status === "Active" || !b.status).length;
     }
-    return books.filter((b) => (b.status === "Active" || !b.status) && b.category === cat).length;
+    return listToCount.filter((b) => (b.status === "Active" || !b.status) && b.category === cat).length;
   };
 
   const getLanguageCount = (lang: string) => {
+    const listToCount = isOnline && activeLibraryTab === "catalog" ? (books.length > 0 ? books : cachedBooks) : downloadedBooks;
     if (lang === "Todos") {
-      return books.filter((b) => b.status === "Active" || !b.status).length;
+      return listToCount.filter((b) => b.status === "Active" || !b.status).length;
     }
-    return books.filter((b) => (b.status === "Active" || !b.status) && b.language === lang).length;
+    return listToCount.filter((b) => (b.status === "Active" || !b.status) && b.language === lang).length;
   };
 
   // Usar o hook useBooks com paginação e busca otimizada
@@ -125,9 +217,17 @@ export default function Library({
   } = useBooks(searchTerm, selectedCategory);
 
   // Filtrar por idioma em cima do lote de livros atual
-  const displayedBooks = fetchedBooks.filter((book) => {
-    return selectedLanguage === "Todos" || book.language === selectedLanguage;
-  });
+  const displayedBooks = isOnline && activeLibraryTab === "catalog"
+    ? fetchedBooks.filter((book) => selectedLanguage === "Todos" || book.language === selectedLanguage)
+    : downloadedBooks.filter((book) => {
+        const matchesSearch = !searchTerm || 
+          book.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (book.category && book.category.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesCategory = selectedCategory === "Todas" || book.category === selectedCategory;
+        const matchesLanguage = selectedLanguage === "Todos" || book.language === selectedLanguage;
+        return matchesSearch && matchesCategory && matchesLanguage;
+      });
 
   // Intersection Observer para Infinite Scroll / Lazy Loading
   const observerTargetRef = useRef<HTMLDivElement | null>(null);
@@ -154,13 +254,47 @@ export default function Library({
   // Find books currently in progress (lastPage > 0 or progressPercentage > 0, but not fully read)
   const inProgressList = progresses
     .map((p) => {
-      const book = books.find((b) => b.id === p.bookId);
+      const bookListToSearch = (activeLibraryTab === "offline" || !isOnline) ? downloadedBooks : (books.length > 0 ? books : cachedBooks);
+      const book = bookListToSearch.find((b) => b.id === p.bookId);
       return { book, progress: p };
     })
     .filter((item) => item.book && item.progress.progressPercentage < 100);
 
   // Find favorited books
-  const favoriteBooks = books.filter((b) => favorites.includes(b.id));
+  const favoriteBooks = ((activeLibraryTab === "offline" || !isOnline) ? downloadedBooks : (books.length > 0 ? books : cachedBooks)).filter((b) => favorites.includes(b.id));
+
+  if (!isOnline && downloadedBooks.length === 0) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center space-y-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-500">
+          <WifiOff className="w-8 h-8 animate-bounce" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-serif font-bold text-zinc-100">Biblioteca Offline Vazia</h2>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            Você está sem conexão com a internet no momento e não possui nenhum livro baixado para leitura offline.
+          </p>
+        </div>
+        <div className="p-4 bg-zinc-900/60 border border-zinc-850 rounded-2xl text-left text-xs text-zinc-400 leading-relaxed">
+          <p className="font-semibold text-zinc-200 mb-1 flex items-center gap-1.5">
+            Como ler offline?
+          </p>
+          <ol className="list-decimal pl-4 space-y-1 mt-1.5">
+            <li>Conecte-se a uma rede de internet (Wi-Fi ou dados móveis).</li>
+            <li>Abra o catálogo de livros do BookVerse.</li>
+            <li>Clique no botão <span className="text-[#e2b874] font-bold">"Baixar para ler Offline"</span> em qualquer livro.</li>
+            <li>Pronto! Você poderá lê-lo e manter seu progresso mesmo sem conexão.</li>
+          </ol>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="w-full bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 font-bold text-xs py-3 rounded-xl transition cursor-pointer"
+        >
+          Verificar Conexão / Recarregar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 font-sans selection:bg-[#e2b874]/30">
@@ -195,6 +329,61 @@ export default function Library({
           />
         </div>
       </div>
+
+      {/* Connection and Syncing Indicators */}
+      {!isOnline && (
+        <div className="mb-8 p-4 bg-amber-950/20 border border-amber-900/30 text-amber-400 rounded-2xl flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/10">
+              <WifiOff className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <p className="font-serif font-bold text-sm text-zinc-100">Você está offline</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                Mostrando seus livros baixados. Conecte-se à internet para explorar o catálogo completo e sincronizar seu progresso.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-md">
+            Modo Offline
+          </span>
+        </div>
+      )}
+
+      {isOnline && isSyncing && (
+        <div className="mb-6 inline-flex items-center gap-2 px-3.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-xs text-zinc-400">
+          <RefreshCw className="w-3.5 h-3.5 text-[#e2b874] animate-spin" />
+          <span>Sincronizando biblioteca com a nuvem...</span>
+        </div>
+      )}
+
+      {/* Library View Switcher Tabs */}
+      {isOnline && (
+        <div className="mb-8 flex border-b border-zinc-850">
+          <button
+            onClick={() => setActiveLibraryTab("catalog")}
+            className={`pb-3.5 px-4 font-serif font-bold text-sm tracking-tight border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              activeLibraryTab === "catalog"
+                ? "border-[#e2b874] text-[#e2b874]"
+                : "border-transparent text-zinc-400 hover:text-zinc-100"
+            }`}
+          >
+            <Compass className="w-4 h-4" />
+            Catálogo Online
+          </button>
+          <button
+            onClick={() => setActiveLibraryTab("offline")}
+            className={`pb-3.5 px-4 font-serif font-bold text-sm tracking-tight border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              activeLibraryTab === "offline"
+                ? "border-[#e2b874] text-[#e2b874]"
+                : "border-transparent text-zinc-400 hover:text-zinc-100"
+            }`}
+          >
+            <Download className="w-4 h-4" />
+            Livros Offline ({downloadedBooks.length})
+          </button>
+        </div>
+      )}
 
       {/* Categories and Languages chips filters */}
       <div className="mb-8 space-y-4">
@@ -412,23 +601,28 @@ export default function Library({
           ) : (
             <div className="space-y-6">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                {displayedBooks.map((book) => {
+                {displayedBooks.map((book, index) => {
                   const isFav = favorites.includes(book.id);
                   const bookProg = progresses.find((p) => p.bookId === book.id);
+                  const shouldRenderAd = !premium && index > 0 && index % 4 === 0;
 
                   return (
-                    <BookCard
-                      key={book.id}
-                      book={book}
-                      user={user}
-                      premium={premium}
-                      isFav={isFav}
-                      bookProg={bookProg}
-                      handleBookClick={handleBookClick}
-                      onToggleFavorite={onToggleFavorite}
-                      setSelectedDetailBook={setSelectedDetailBook}
-                      onTriggerPaywall={onTriggerPaywall}
-                    />
+                    <React.Fragment key={book.id}>
+                      {shouldRenderAd && (
+                        <NativeBookAd index={index} />
+                      )}
+                      <BookCard
+                        book={book}
+                        user={user}
+                        premium={premium}
+                        isFav={isFav}
+                        bookProg={bookProg}
+                        handleBookClick={handleBookClick}
+                        onToggleFavorite={onToggleFavorite}
+                        setSelectedDetailBook={setSelectedDetailBook}
+                        onTriggerPaywall={onTriggerPaywall}
+                      />
+                    </React.Fragment>
                   );
                 })}
               </div>

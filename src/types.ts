@@ -31,6 +31,9 @@ export interface User {
     priceId?: string;
     billingInterval?: "monthly" | "yearly";
   };
+  plan?: "free" | "premium" | "FREE" | "PREMIUM";
+  subscriptionStatus?: "active" | "canceled" | "past_due" | "expired" | "trial";
+  removeAds?: boolean;
   preferences?: {
     language?: string;
     theme?: string;
@@ -185,6 +188,7 @@ export interface Bookmark {
   bookId: string;
   page: number;
   createdAt: string;
+  isPendingSync?: boolean;
 }
 
 export interface HighlightAndNote {
@@ -196,6 +200,7 @@ export interface HighlightAndNote {
   text?: string; // Optional user note associated with this highlight
   color: string; // e.g. 'yellow', 'green', 'blue', 'pink'
   createdAt: string;
+  isPendingSync?: boolean;
 }
 
 export interface ReviewReply {

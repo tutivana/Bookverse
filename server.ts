@@ -85,6 +85,11 @@ interface DatabaseSchema {
   adminPortalAttempts?: number;
   adminPortalLockedUntil?: number;
   publicPortalAttempts?: number;
+  adsSettings?: {
+    adsEnabled: boolean;
+    maxAdsPerSession: number;
+    rewardAdsEnabled: boolean;
+  };
 }
 
 const DEFAULT_DB: DatabaseSchema = {
@@ -255,7 +260,12 @@ const DEFAULT_DB: DatabaseSchema = {
   passwordRecoveryRequests: [],
   adminPortalAttempts: 0,
   adminPortalLockedUntil: 0,
-  publicPortalAttempts: 0
+  publicPortalAttempts: 0,
+  adsSettings: {
+    adsEnabled: true,
+    maxAdsPerSession: 5,
+    rewardAdsEnabled: true
+  }
 };
 
 function readDb(): DatabaseSchema {
@@ -326,6 +336,15 @@ function readDb(): DatabaseSchema {
       changed = true;
     }
 
+    if (!db.adsSettings) {
+      db.adsSettings = {
+        adsEnabled: true,
+        maxAdsPerSession: 5,
+        rewardAdsEnabled: true
+      };
+      changed = true;
+    }
+
     // Ensure users have roles and statuses
     if (db.users) {
       db.users.forEach((u: any) => {
@@ -373,6 +392,18 @@ function readDb(): DatabaseSchema {
             expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
             autoRenew: false
           };
+          changed = true;
+        }
+        if (!u.plan) {
+          u.plan = u.subscription?.plan === "PREMIUM" ? "premium" : "free";
+          changed = true;
+        }
+        if (!u.subscriptionStatus) {
+          u.subscriptionStatus = u.subscription?.status || "active";
+          changed = true;
+        }
+        if (u.removeAds === undefined) {
+          u.removeAds = u.subscription?.plan === "PREMIUM" ? true : false;
           changed = true;
         }
       });
@@ -3656,6 +3687,90 @@ app.post("/api/gemini/tts", async (req, res) => {
       res.status(500).json({ error: "Erro ao sintetizar voz no servidor: " + errMsg });
     }
   }
+});
+
+// ==========================================
+// ADVERTISEMENT ENDPOINTS
+// ==========================================
+app.get("/api/ads/settings", (req, res) => {
+  const db = readDb();
+  res.json(db.adsSettings || { adsEnabled: true, maxAdsPerSession: 5, rewardAdsEnabled: true });
+});
+
+app.post("/api/ads/settings", (req, res) => {
+  const { adminId, adsEnabled, maxAdsPerSession, rewardAdsEnabled } = req.body;
+  const db = readDb();
+  
+  if (adminId) {
+    const admin = db.users.find(u => u.id === adminId);
+    if (!admin || (admin.role !== "Super Administrador" && admin.role !== "Administrador")) {
+      res.status(403).json({ error: "Acesso administrativo negado." });
+      return;
+    }
+  }
+
+  db.adsSettings = {
+    adsEnabled: adsEnabled !== false,
+    maxAdsPerSession: typeof maxAdsPerSession === "number" ? maxAdsPerSession : 5,
+    rewardAdsEnabled: rewardAdsEnabled !== false
+  };
+
+  writeDb(db);
+  res.json({ success: true, adsSettings: db.adsSettings });
+});
+
+app.post("/api/ads/reward", (req, res) => {
+  const { userId, type } = req.body;
+  if (!userId) {
+    res.status(400).json({ error: "userId é obrigatório" });
+    return;
+  }
+
+  const db = readDb();
+  const userIndex = db.users.findIndex(u => u.id === userId);
+  if (userIndex === -1) {
+    res.status(404).json({ error: "Usuário não encontrado" });
+    return;
+  }
+
+  if (type === "temporary_premium") {
+    db.users[userIndex].subscription = {
+      plan: "PREMIUM",
+      status: "active",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      autoRenew: false
+    };
+    db.users[userIndex].plan = "premium";
+    db.users[userIndex].subscriptionStatus = "active";
+    db.users[userIndex].removeAds = true;
+    
+    createNotification({
+      userId,
+      title: "🎁 Acesso Premium Temporário Liberado!",
+      message: "Você assistiu ao anúncio e desbloqueou 1 hora de acesso Premium grátis!",
+      type: "account",
+      category: "premium_activated",
+      icon: "sparkles",
+      priority: "high",
+      origin: "system",
+      destinationLink: "library"
+    });
+  } else {
+    createNotification({
+      userId,
+      title: "⭐ Recompensa creditada!",
+      message: "Muito obrigado por assistir ao anúncio. Seus benefícios foram adicionados com sucesso!",
+      type: "account",
+      category: "welcome",
+      icon: "star",
+      priority: "medium",
+      origin: "system",
+      destinationLink: "library"
+    });
+  }
+
+  writeDb(db);
+  res.json({ success: true, user: db.users[userIndex] });
 });
 
 // ==========================================

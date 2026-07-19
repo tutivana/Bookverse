@@ -369,6 +369,8 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
   const [parsingStatus, setParsingStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [tabLoading, setTabLoading] = useState(false);
+  const [adsSettings, setAdsSettings] = useState<{ adsEnabled: boolean; interstitialFrequencyMinutes: number; rewardDurationHours: number } | null>(null);
+  const [isSavingAdsSettings, setIsSavingAdsSettings] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -506,6 +508,15 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
           }
         } catch (pErr) {
           console.error("Error loading saas subscription prices:", pErr);
+        }
+        try {
+          const adsRes = await fetch("/api/ads/settings");
+          const adsData = await adsRes.json();
+          if (adsData && adsData.settings) {
+            setAdsSettings(adsData.settings);
+          }
+        } catch (adsErr) {
+          console.error("Error loading ads settings:", adsErr);
         }
         const u = await adminFetchUsers();
         setUsers(u);
@@ -2569,7 +2580,7 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                           });
                           const data = await res.json();
                           if (data.success) {
-                            alert("Preços de assinatura atualizados com sucesso!");
+                            alert("Preços de assinatura updated!");
                           } else {
                             alert(data.error || "Erro ao salvar preços");
                           }
@@ -2586,6 +2597,99 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
                   </div>
                 </div>
               </div>
+
+              {/* SECTION 4: Ad Monetization Settings */}
+              {adsSettings && (
+                <div className="bg-white border border-[#ece9dc] rounded-3xl overflow-hidden shadow-sm mt-6">
+                  <div className="p-6 bg-[#f6f5ee]/40 border-b border-[#ece9dc]">
+                    <h3 className="font-serif font-bold text-lg text-[#2d291c]">Configuração de Monetização por Anúncios</h3>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Gerencie os anúncios exibidos para usuários do plano Gratuito.</p>
+                  </div>
+
+                  <div className="p-6 space-y-6">
+                    <div className="flex items-center justify-between bg-gray-50 border border-[#ece9dc] p-4 rounded-2xl">
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-800">Ativar Sistema de Anúncios</h4>
+                        <p className="text-[10px] text-gray-400 mt-0.5">Quando desativado, nenhum anúncio (intersticial ou nativo) será exibido, inclusive para usuários gratuitos.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAdsSettings(prev => prev ? { ...prev, adsEnabled: !prev.adsEnabled } : null)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                          adsSettings.adsEnabled ? 'bg-[#8a7e58]' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            adsSettings.adsEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Intervalo de Intersticiais (minutos)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1440"
+                          value={adsSettings.interstitialFrequencyMinutes}
+                          onChange={(e) => setAdsSettings(prev => prev ? { ...prev, interstitialFrequencyMinutes: Number(e.target.value) } : null)}
+                          className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl px-4 py-2.5 text-xs text-gray-800 focus:border-[#8a7e58] outline-none font-sans"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1">Tempo mínimo que o usuário deve esperar entre anúncios intersticiais de capítulos.</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Duração da Recompensa (horas)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="168"
+                          value={adsSettings.rewardDurationHours}
+                          onChange={(e) => setAdsSettings(prev => prev ? { ...prev, rewardDurationHours: Number(e.target.value) } : null)}
+                          className="w-full bg-gray-50 border border-[#ece9dc] rounded-xl px-4 py-2.5 text-xs text-gray-800 focus:border-[#8a7e58] outline-none font-sans"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1">Horas de Premium temporário (sem anúncios, recursos completos) concedidas após assistir a um anúncio premiado.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="button"
+                        disabled={isSavingAdsSettings}
+                        onClick={async () => {
+                          setIsSavingAdsSettings(true);
+                          try {
+                            const res = await fetch("/api/ads/settings", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                adminId: currentAdmin.id,
+                                ...adsSettings
+                              })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              alert("Configurações de monetização atualizadas com sucesso!");
+                            } else {
+                              alert(data.error || "Erro ao salvar configurações");
+                            }
+                          } catch (err) {
+                            alert("Erro ao conectar ao servidor para salvar configurações");
+                          } finally {
+                            setIsSavingAdsSettings(false);
+                          }
+                        }}
+                        className="text-xs bg-[#8a7e58] hover:bg-[#726848] text-white px-5 py-2.5 rounded-xl transition font-bold cursor-pointer disabled:opacity-50"
+                      >
+                        {isSavingAdsSettings ? "Salvando..." : "Salvar Configurações de Monetização"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

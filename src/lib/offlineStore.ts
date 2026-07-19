@@ -257,6 +257,28 @@ export async function getOfflineBookmarks(bookId: string): Promise<Bookmark[]> {
   });
 }
 
+export async function getAllOfflineBookmarks(): Promise<Bookmark[]> {
+  if (!isStorageSupported()) return [];
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("bookmarks", "readonly");
+    const request = tx.objectStore("bookmarks").getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteOfflineBookmark(bookmarkId: string): Promise<void> {
+  if (!isStorageSupported()) return;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("bookmarks", "readwrite");
+    const request = tx.objectStore("bookmarks").delete(bookmarkId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
 export async function saveOfflineNote(note: HighlightAndNote): Promise<void> {
   if (!isStorageSupported()) return;
   const db = await openDB();
@@ -278,6 +300,28 @@ export async function getOfflineNotes(bookId: string): Promise<HighlightAndNote[
       const all = request.result as HighlightAndNote[];
       resolve(all.filter((n) => n.bookId === bookId));
     };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getAllOfflineNotes(): Promise<HighlightAndNote[]> {
+  if (!isStorageSupported()) return [];
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readonly");
+    const request = tx.objectStore("notes").getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteOfflineNote(noteId: string): Promise<void> {
+  if (!isStorageSupported()) return;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readwrite");
+    const request = tx.objectStore("notes").delete(noteId);
+    request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
 }

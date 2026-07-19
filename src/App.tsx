@@ -21,6 +21,7 @@ import {
 import { User, Book, ReadingProgress, ReadingStats, BookNotification } from "./types";
 import { fetchBooks, fetchUserStats, saveReadingProgress, fetchNotifications, markNotificationsAsRead, updateUserProfile } from "./lib/api";
 import { isUserPremium } from "./lib/subscription";
+import { AdManagerProvider } from "./components/AdManager";
 
 import AuthScreen from "./components/AuthScreen";
 import Library from "./components/Library";
@@ -256,8 +257,16 @@ export default function App() {
           }
         }
 
+        // Bidirectional sync for favorites, bookmarks, notes, and reading progresses
+        const { syncUserData } = await import("./lib/syncEngine");
+        await syncUserData(user.id, favorites, (updatedFavs) => {
+          setFavorites(updatedFavs);
+        });
+
         if (progressSyncedCount > 0 || reviewsSyncedCount > 0) {
           console.log(`[BookVerse SW] Sincronização automática concluída: ${progressSyncedCount} progressos e ${reviewsSyncedCount} comentários.`);
+          loadUserData();
+        } else {
           loadUserData();
         }
       } catch (err) {
@@ -617,7 +626,11 @@ export default function App() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#09090b] font-sans text-zinc-100 selection:bg-[#e2b874]/30">
+    <AdManagerProvider user={user} onUserUpdate={(updatedUser) => {
+      setUser(updatedUser);
+      localStorage.setItem("bookverse_user", JSON.stringify(updatedUser));
+    }}>
+      <div className="min-h-screen flex flex-col bg-[#09090b] font-sans text-zinc-100 selection:bg-[#e2b874]/30">
       {/* Universal Top Navigation Header */}
       <header className="border-b border-zinc-800 bg-[#121214]/90 backdrop-blur-md sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -970,5 +983,6 @@ export default function App() {
         </>
       )}
     </div>
+    </AdManagerProvider>
   );
 }

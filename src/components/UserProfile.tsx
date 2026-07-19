@@ -63,6 +63,7 @@ interface UserProfileProps {
 
 import NotificationSettings from "./NotificationSettings";
 import OfflineManager from "./OfflineManager";
+import { PremiumChecker, RewardedAdButton } from "./AdManager";
 import ContactSupportModal from "./ContactSupportModal";
 
 type ProfileTab = "profile" | "settings" | "security" | "privacy" | "notifications" | "offline" | "billing";
@@ -1657,6 +1658,17 @@ export default function UserProfile({
                     )}
                   </div>
                 )}
+
+                {/* Monetization & Rewards Dashboard in Profile */}
+                <div className="border-t border-zinc-850 pt-6 mt-6">
+                  <h4 className="text-sm font-serif font-bold text-zinc-200 mb-4">
+                    Status de Monetização & Recompensas
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <PremiumChecker />
+                    <RewardedAdButton />
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
