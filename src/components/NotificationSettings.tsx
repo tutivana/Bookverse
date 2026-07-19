@@ -7,7 +7,10 @@ import {
   HelpCircle, 
   Laptop, 
   PlusCircle, 
-  AlertCircle 
+  AlertCircle,
+  Clock,
+  Volume2,
+  BellOff
 } from "lucide-react";
 import { User } from "../types";
 import { updateNotificationPreferences, registerDeviceToken } from "../lib/api";
@@ -47,6 +50,23 @@ export default function NotificationSettings({ user, onUpdateUser }: Notificatio
   const [tokenInput, setTokenInput] = useState("");
   const [tokenStatus, setTokenStatus] = useState<string | null>(null);
 
+  // Daily browser reading reminders state
+  const [reminderEnabled, setReminderEnabled] = useState(
+    user.preferences?.readingReminderEnabled ?? false
+  );
+  const [reminderTime, setReminderTime] = useState(
+    user.preferences?.readingReminderTime ?? "20:00"
+  );
+  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(
+    "Notification" in window ? Notification.permission : "default"
+  );
+
+  useEffect(() => {
+    if ("Notification" in window) {
+      setPermissionStatus(Notification.permission);
+    }
+  }, []);
+
   // Sync state if user changes
   useEffect(() => {
     if (user.preferences?.notifyInApp) {
@@ -54,6 +74,14 @@ export default function NotificationSettings({ user, onUpdateUser }: Notificatio
     }
     if (user.preferences?.notifyPushPrefs) {
       setPush(prev => ({ ...prev, ...user.preferences?.notifyPushPrefs }));
+    }
+    if (user.preferences) {
+      if (user.preferences.readingReminderEnabled !== undefined) {
+        setReminderEnabled(user.preferences.readingReminderEnabled);
+      }
+      if (user.preferences.readingReminderTime !== undefined) {
+        setReminderTime(user.preferences.readingReminderTime);
+      }
     }
   }, [user]);
 
@@ -67,13 +95,55 @@ export default function NotificationSettings({ user, onUpdateUser }: Notificatio
     setSaveSuccess(false);
   };
 
+  const handleRequestPermission = async () => {
+    if (!("Notification" in window)) {
+      alert("Este navegador não suporta notificações de área de trabalho.");
+      return;
+    }
+    try {
+      const perm = await Notification.requestPermission();
+      setPermissionStatus(perm);
+      if (perm === "granted") {
+        new Notification("Notificações Ativadas! 🎉", {
+          body: "Parabéns! Agora você receberá lembretes diários para ler no BookVerse no horário configurado.",
+          icon: "/favicon.ico"
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao solicitar permissão de notificação:", err);
+    }
+  };
+
+  const handleTestNotification = () => {
+    if (!("Notification" in window)) {
+      alert("Este navegador não suporta notificações de área de trabalho.");
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      alert("Permissão para notificações não concedida. Por favor, ative as notificações primeiro.");
+      return;
+    }
+    new Notification("Teste de Lembrete BookVerse 📚", {
+      body: "Este é um teste do seu lembrete diário de leitura. Ótimo trabalho em reservar um tempo para ler!",
+      icon: "/favicon.ico"
+    });
+  };
+
   const handleSavePreferences = async () => {
     try {
       setSaving(true);
       setSaveSuccess(false);
+
+      if (reminderEnabled && "Notification" in window && Notification.permission !== "granted") {
+        const perm = await Notification.requestPermission();
+        setPermissionStatus(perm);
+      }
+
       await updateNotificationPreferences(user.id, {
         notifyInApp: inApp,
-        notifyPushPrefs: push
+        notifyPushPrefs: push,
+        readingReminderEnabled: reminderEnabled,
+        readingReminderTime: reminderTime
       });
 
       // Update user in local context
@@ -82,7 +152,9 @@ export default function NotificationSettings({ user, onUpdateUser }: Notificatio
         preferences: {
           ...user.preferences,
           notifyInApp: inApp,
-          notifyPushPrefs: push
+          notifyPushPrefs: push,
+          readingReminderEnabled: reminderEnabled,
+          readingReminderTime: reminderTime
         }
       };
       onUpdateUser(updatedUser);
@@ -244,6 +316,119 @@ export default function NotificationSettings({ user, onUpdateUser }: Notificatio
             <Save className="w-4 h-4" />
             {saving ? "Salvando..." : "Salvar Preferências"}
           </button>
+        </div>
+      </div>
+
+      {/* Daily Browser Reading Reminder Settings */}
+      <div className="bg-[#121214] border border-zinc-850 rounded-2xl p-6 space-y-6" id="browser-reminder-settings">
+        <div className="space-y-1 pb-4 border-b border-zinc-800">
+          <h5 className="font-bold text-zinc-200 text-sm flex items-center gap-2">
+            <Clock className="w-4 h-4 text-[#e2b874]" />
+            Lembretes Diários no Navegador (Notification API)
+          </h5>
+          <p className="text-[10px] text-zinc-400 font-medium">
+            Receba lembretes diários diretamente na área de trabalho do seu computador ou celular, utilizando a tecnologia de notificações nativa do navegador.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Settings controls */}
+          <div className="space-y-4">
+            <span className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">Configuração de Horário</span>
+            
+            <div className="space-y-4 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-zinc-200 block">Ativar Lembrete</span>
+                  <p className="text-[10px] text-zinc-400 font-medium">Lembrar diariamente no horário agendado</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={reminderEnabled}
+                    onChange={(e) => {
+                      setReminderEnabled(e.target.checked);
+                      setSaveSuccess(false);
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-[#121214] after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#e2b874]" />
+                </label>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase block">Horário do Lembrete</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    disabled={!reminderEnabled}
+                    value={reminderTime}
+                    onChange={(e) => {
+                      setReminderTime(e.target.value);
+                      setSaveSuccess(false);
+                    }}
+                    className="bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-[#e2b874] disabled:opacity-40 disabled:cursor-not-allowed text-center font-bold"
+                  />
+                  <span className="text-xs text-zinc-500 font-medium">(Horário Local)</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-zinc-500 font-medium">Salve as configurações abaixo na página</span>
+            </div>
+          </div>
+
+          {/* Browser Notification Permissions & Test */}
+          <div className="space-y-4">
+            <span className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">Status das Notificações</span>
+            
+            <div className="space-y-4 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between h-full min-h-[140px]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${
+                    permissionStatus === "granted" ? "bg-emerald-500" : permissionStatus === "denied" ? "bg-rose-500" : "bg-amber-500"
+                  }`} />
+                  <span className="text-xs font-bold text-zinc-200">
+                    {permissionStatus === "granted" 
+                      ? "Autorizado" 
+                      : permissionStatus === "denied" 
+                      ? "Bloqueado pelo Navegador" 
+                      : "Pendente de Autorização"}
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-400 font-medium mt-1">
+                  {permissionStatus === "granted" 
+                    ? "As notificações do BookVerse estão prontas para funcionar de forma nativa."
+                    : permissionStatus === "denied"
+                    ? "Para receber notificações, acesse as configurações do cadeado no seu navegador e mude de 'Bloquear' para 'Permitir'."
+                    : "Você precisa autorizar o navegador a exibir alertas para receber os lembretes diários."}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                {permissionStatus !== "granted" && (
+                  <button
+                    type="button"
+                    onClick={handleRequestPermission}
+                    className="flex-grow bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 font-bold py-2 px-4 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
+                  >
+                    Permitir Notificações
+                  </button>
+                )}
+                
+                <button
+                  type="button"
+                  disabled={permissionStatus !== "granted"}
+                  onClick={handleTestNotification}
+                  className="flex-grow bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 font-bold py-2 px-4 rounded-xl text-xs transition active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                  Testar Notificação
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

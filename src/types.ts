@@ -39,6 +39,8 @@ export interface User {
     notifyPush?: boolean;
     notifyEmail?: boolean;
     audioSpeed?: string;
+    readingReminderEnabled?: boolean;
+    readingReminderTime?: string;
     notifyInApp?: {
       newBooks?: boolean;
       newAudiobooks?: boolean;

@@ -38,3 +38,32 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #e2b874;
 }
+
+/* Rich nested list styling for BookVerse markdown renderers */
+.book-verse-ul, .markdown-body ul, .book-content-container ul, .prose ul {
+  list-style-type: disc !important;
+}
+.book-verse-ul .book-verse-ul, .markdown-body ul ul, .book-content-container ul ul, .prose ul ul {
+  list-style-type: circle !important;
+}
+.book-verse-ul .book-verse-ul .book-verse-ul, .markdown-body ul ul ul, .book-content-container ul ul ul, .prose ul ul ul {
+  list-style-type: square !important;
+}
+
+.book-verse-ol, .markdown-body ol, .book-content-container ol, .prose ol {
+  list-style-type: decimal !important;
+}
+.book-verse-ol .book-verse-ol, .markdown-body ol ol, .book-content-container ol ol, .prose ol ol {
+  list-style-type: lower-alpha !important;
+}
+.book-verse-ol .book-verse-ol .book-verse-ol, .markdown-body ol ol ol, .book-content-container ol ol ol, .prose ol ol ol {
+  list-style-type: lower-roman !important;
+}
+
+/* Interoperability between nested ordered and unordered lists */
+.book-verse-ol .book-verse-ul, .markdown-body ol ul, .book-content-container ol ul, .prose ol ul {
+  list-style-type: disc !important;
+}
+.book-verse-ul .book-verse-ol, .markdown-body ul ol, .book-content-container ul ol, .prose ul ol {
+  list-style-type: decimal !important;
+}

@@ -43,6 +43,32 @@ interface ReaderProps {
 
 type ReaderTheme = "claro" | "sepia" | "escuro" | "auto";
 
+function getLastOrderedListNumber(markdownContent: string): number {
+  if (!markdownContent) return 0;
+  const lines = markdownContent.split("\n");
+  let lastNum = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const match = line.match(/^(\d+)\.\s+/);
+    if (match) {
+      lastNum = parseInt(match[1], 10);
+    }
+  }
+  return lastNum;
+}
+
+export function preprocessMarkdownLists(content: string): string {
+  if (!content) return content;
+  return content
+    .split("\n")
+    .map((line) => {
+      // Matches lines that start with spaces/tabs, followed by digits, a period, and then a character that is NOT a space, period, or digit.
+      // E.g., "1.texto" -> "1. texto"
+      return line.replace(/^(\s*)(\d+)\.(?!\s|\d|\.)/g, "$1$2. ");
+    })
+    .join("\n");
+}
+
 export default function Reader({
   book,
   userId,
@@ -69,6 +95,16 @@ export default function Reader({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ page: number; snippet: string }[]>([]);
 
+  // Page tracking states & refs
+  const [visitedPages, setVisitedPages] = useState<number[]>(() => [progress?.lastPage || 0]);
+  const [showFloatingNav, setShowFloatingNav] = useState(false);
+  
+  const pageScrollPositionsRef = useRef<{ [page: number]: number }>({});
+  const readerScrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
   // Dynamically resolve theme based on "auto" option (time of day)
   const getResolvedTheme = (t: ReaderTheme): "claro" | "sepia" | "escuro" => {
     if (t !== "auto") return t;
@@ -83,6 +119,121 @@ export default function Reader({
   };
 
   const resolvedTheme = getResolvedTheme(theme);
+
+  // Helper functions to dynamically highlight matching text in pages
+  const renderHighlightedText = (text: string, pageNotes: HighlightAndNote[]) => {
+    if (!pageNotes || pageNotes.length === 0 || !text) return text;
+
+    interface MatchInterval {
+      start: number;
+      end: number;
+      note: HighlightAndNote;
+    }
+
+    let matches: MatchInterval[] = [];
+
+    pageNotes.forEach((note) => {
+      const term = note.selectedText;
+      if (!term) return;
+
+      let index = text.indexOf(term);
+      while (index !== -1) {
+        matches.push({
+          start: index,
+          end: index + term.length,
+          note,
+        });
+        index = text.indexOf(term, index + 1);
+      }
+    });
+
+    if (matches.length === 0) return text;
+
+    matches.sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      return b.end - a.end;
+    });
+
+    const finalMatches: MatchInterval[] = [];
+    let lastEnd = 0;
+
+    for (const match of matches) {
+      if (match.start >= lastEnd) {
+        finalMatches.push(match);
+        lastEnd = match.end;
+      }
+    }
+
+    if (finalMatches.length === 0) return text;
+
+    const result: React.ReactNode[] = [];
+    let currentIndex = 0;
+
+    finalMatches.forEach((match, i) => {
+      if (match.start > currentIndex) {
+        result.push(text.substring(currentIndex, match.start));
+      }
+
+      let colorClass = "";
+      if (resolvedTheme === "escuro") {
+        if (match.note.color === "green") colorClass = "bg-emerald-950/80 text-emerald-300 border-b border-emerald-500/50";
+        else if (match.note.color === "blue") colorClass = "bg-blue-950/80 text-blue-300 border-b border-blue-500/50";
+        else if (match.note.color === "pink") colorClass = "bg-pink-950/80 text-pink-300 border-b border-pink-500/50";
+        else colorClass = "bg-amber-950/80 text-amber-300 border-b border-amber-500/50";
+      } else if (resolvedTheme === "sepia") {
+        if (match.note.color === "green") colorClass = "bg-green-100/90 text-green-900 border-b border-green-400/40";
+        else if (match.note.color === "blue") colorClass = "bg-blue-100/90 text-blue-900 border-b border-blue-400/40";
+        else if (match.note.color === "pink") colorClass = "bg-pink-100/90 text-pink-900 border-b border-pink-400/40";
+        else colorClass = "bg-yellow-100/90 text-yellow-900 border-b border-yellow-400/40";
+      } else {
+        if (match.note.color === "green") colorClass = "bg-green-100 text-green-900 border-b border-green-500/30";
+        else if (match.note.color === "blue") colorClass = "bg-blue-100 text-blue-900 border-b border-blue-500/30";
+        else if (match.note.color === "pink") colorClass = "bg-pink-100 text-pink-900 border-b border-pink-500/30";
+        else colorClass = "bg-yellow-100 text-yellow-900 border-b border-yellow-500/30";
+      }
+
+      result.push(
+        <span
+          key={`hl-${match.note.id}-${i}`}
+          className={`${colorClass} px-1 rounded-sm relative group cursor-pointer font-medium transition-all duration-200 hover:brightness-110`}
+          title={match.note.text || "Destaque"}
+        >
+          {text.substring(match.start, match.end)}
+          {match.note.text && (
+            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-zinc-900 text-zinc-100 text-[11px] font-sans px-2.5 py-1.5 rounded-lg shadow-xl border border-zinc-800 whitespace-nowrap z-50">
+              {match.note.text}
+            </span>
+          )}
+        </span>
+      );
+
+      currentIndex = match.end;
+    });
+
+    if (currentIndex < text.length) {
+      result.push(text.substring(currentIndex));
+    }
+
+    return result;
+  };
+
+  const highlightChildren = (node: React.ReactNode): React.ReactNode => {
+    if (typeof node === "string") {
+      return renderHighlightedText(node, notes.filter((n) => n.page === currentPage));
+    }
+    if (React.isValidElement(node)) {
+      const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+      if (element.props && element.props.children) {
+        const childrenArray = React.Children.toArray(element.props.children);
+        const highlighted = childrenArray.map((child, idx) => {
+          const childKey = (child as any)?.key || idx;
+          return <React.Fragment key={childKey}>{highlightChildren(child)}</React.Fragment>;
+        });
+        return React.cloneElement(element, {}, ...highlighted);
+      }
+    }
+    return node;
+  };
   
   // Timer to track exact active reading time (in seconds) on the current page
   const timeSpentRef = useRef<number>(0);
@@ -168,6 +319,12 @@ export default function Reader({
   useEffect(() => {
     if (progress) {
       setCurrentPage(progress.lastPage);
+      setVisitedPages((prev) => {
+        if (!prev.includes(progress.lastPage)) {
+          return [...prev, progress.lastPage];
+        }
+        return prev;
+      });
     }
   }, [progress]);
 
@@ -187,15 +344,85 @@ export default function Reader({
   // Handle page turn and trigger parent progress update with exact reading seconds
   const handlePageChange = (newPage: number) => {
     if (newPage >= 0 && newPage < book.pages) {
+      // Save current scroll position before page change
+      if (readerScrollContainerRef.current) {
+        pageScrollPositionsRef.current[currentPage] = readerScrollContainerRef.current.scrollTop;
+      }
+
       const elapsed = timeSpentRef.current;
       timeSpentRef.current = 0; // Reset for the next page
+      
+      const hasVisited = visitedPages.includes(newPage);
+
       setCurrentPage(newPage);
       onUpdateProgress(newPage, elapsed);
       // Clean selected text draft
       setSelectedText("");
       setShowHighlightForm(false);
       setAiResponse("");
+
+      if (!hasVisited) {
+        setVisitedPages((prev) => [...prev, newPage]);
+      }
+
+      // Restore scroll position
+      setTimeout(() => {
+        if (readerScrollContainerRef.current) {
+          if (hasVisited) {
+            readerScrollContainerRef.current.scrollTop = pageScrollPositionsRef.current[newPage] || 0;
+          } else {
+            readerScrollContainerRef.current.scrollTop = 0;
+          }
+        }
+      }, 50);
     }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartXRef.current = touch.clientX;
+    touchStartYRef.current = touch.clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+
+    const touch = e.changedTouches[0];
+    const diffX = touch.clientX - touchStartXRef.current;
+    const diffY = touch.clientY - touchStartYRef.current;
+
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      if (Math.abs(diffX) > 50) {
+        if (diffX > 0) {
+          if (currentPage > 0) {
+            handlePageChange(currentPage - 1);
+          }
+        } else {
+          if (currentPage < book.pages - 1) {
+            handlePageChange(currentPage + 1);
+          }
+        }
+      }
+    }
+
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  };
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("button") ||
+      target.closest("a") ||
+      target.closest("input") ||
+      target.closest("select") ||
+      target.closest("textarea") ||
+      target.closest(".highlight-panel") ||
+      window.getSelection()?.toString().trim()
+    ) {
+      return;
+    }
+    setShowFloatingNav((prev) => !prev);
   };
 
   // Handle exiting back to library and saving the final reading session seconds
@@ -707,8 +934,71 @@ export default function Reader({
 
       {/* Main split viewport layout */}
       <div className={`flex-grow flex relative overflow-hidden ${isFocusMode ? "h-screen" : "h-[calc(100vh-53px)]"}`}>
+        
+        {/* Floating navigation buttons */}
+        <AnimatePresence>
+          {showFloatingNav && (
+            <>
+              {currentPage > 0 && (
+                <motion.button
+                  key="float-left"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.15 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePageChange(currentPage - 1);
+                  }}
+                  className="absolute left-6 top-1/2 -translate-y-1/2 p-4 rounded-full transition duration-200 cursor-pointer shadow-xl z-30 bg-amber-500 hover:bg-amber-600 hover:scale-110 text-zinc-950 flex items-center justify-center border border-amber-400"
+                  title="Página Anterior"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </motion.button>
+              )}
+              {currentPage < book.pages - 1 && (
+                <motion.button
+                  key="float-right"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.15 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePageChange(currentPage + 1);
+                  }}
+                  className="absolute right-6 top-1/2 -translate-y-1/2 p-4 rounded-full transition duration-200 cursor-pointer shadow-xl z-30 bg-amber-500 hover:bg-amber-600 hover:scale-110 text-zinc-950 flex items-center justify-center border border-amber-400"
+                  title="Próxima Página"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </motion.button>
+              )}
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* Discrete always-visible page indicator at the bottom right */}
+        <div className="absolute bottom-4 right-4 z-20 pointer-events-none select-none">
+          <span className={`text-[10px] font-bold font-mono px-2.5 py-1.5 rounded-lg shadow border transition-all duration-300 ${
+            resolvedTheme === "escuro" 
+              ? "bg-zinc-950/85 border-zinc-800 text-zinc-400 shadow-black/40" 
+              : resolvedTheme === "sepia"
+                ? "bg-[#fcf7e8]/85 border-[#ebdcb3] text-[#807255] shadow-[#ebdcb3]/20"
+                : "bg-white/85 border-gray-200 text-gray-500 shadow-gray-200/40"
+          }`}>
+            Pág. {currentPage + 1} / {book.pages}
+          </span>
+        </div>
+
         {/* E-book reader core body */}
-        <div className="flex-grow flex flex-col justify-between p-4 md:p-8 overflow-y-auto" onMouseUp={handleTextSelection}>
+        <div
+          ref={readerScrollContainerRef}
+          className="flex-grow flex flex-col justify-between p-4 md:p-8 overflow-y-auto"
+          onMouseUp={handleTextSelection}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onClick={handleContainerClick}
+        >
           <div className="max-w-2xl mx-auto w-full my-auto">
             
             {/* Pages viewport animation */}
@@ -760,7 +1050,7 @@ export default function Reader({
                               }
                             }}
                           >
-                            {children}
+                            {highlightChildren(children)}
                           </p>
                         );
                       },
@@ -784,22 +1074,35 @@ export default function Reader({
                               ? "border-[#8a7e58] bg-[#8a7e58]/5 text-[#695c42]"
                               : "border-[#8a7e58] bg-gray-50 text-gray-700"
                         }`}>
-                          {children}
+                          {highlightChildren(children)}
                         </blockquote>
                       ),
                       ul: ({ children }) => (
-                        <ul className="list-disc pl-6 my-4 space-y-2 text-sm md:text-base">
+                        <ul className="book-verse-ul pl-6 my-4 space-y-2 text-sm md:text-base">
                           {children}
                         </ul>
                       ),
-                      ol: ({ children }) => (
-                        <ol className="list-decimal pl-6 my-4 space-y-2 text-sm md:text-base">
-                          {children}
-                        </ol>
-                      ),
+                      ol: ({ children, start }) => {
+                        const currentPageContent = book.pdfContent[currentPage] || "";
+                        let finalStart = start;
+
+                        if (currentPageContent.includes("<!-- continue-ordered-list -->") && currentPage > 0) {
+                          const prevPageContent = book.pdfContent[currentPage - 1] || "";
+                          const lastNum = getLastOrderedListNumber(prevPageContent);
+                          if (lastNum > 0) {
+                            finalStart = lastNum + 1;
+                          }
+                        }
+
+                        return (
+                          <ol start={finalStart} className="book-verse-ol pl-6 my-4 space-y-2 text-sm md:text-base">
+                            {children}
+                          </ol>
+                        );
+                      },
                       li: ({ children }) => (
                         <li className="leading-relaxed">
-                          {children}
+                          {highlightChildren(children)}
                         </li>
                       ),
                       hr: () => (
@@ -897,7 +1200,7 @@ export default function Reader({
                       ),
                     }}
                   >
-                    {book.pdfContent[currentPage]}
+                    {preprocessMarkdownLists(book.pdfContent[currentPage] || "")}
                   </ReactMarkdown>
                 </div>
               </motion.div>

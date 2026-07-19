@@ -1836,7 +1836,29 @@ app.get("/api/books/:id", (req, res) => {
 
 // Admin Operations for Books Catalog (CRUD)
 app.post("/api/admin/books", (req, res) => {
-  const { title, author, category, description, pages, estimatedReadTime, audiobookAvailable, audioDuration, coverUrl, language, publishDate, pdfContent, audioChapters, copyright } = req.body;
+  const { 
+    title, 
+    author, 
+    category, 
+    description, 
+    pages, 
+    estimatedReadTime, 
+    audiobookAvailable, 
+    audioDuration, 
+    coverUrl, 
+    language, 
+    publishDate, 
+    pdfContent, 
+    audioChapters, 
+    copyright,
+    summary,
+    status,
+    isbn,
+    keywords,
+    tags,
+    accessType,
+    isFeatured
+  } = req.body;
   
   if (!title || !author || !category || !description || !pdfContent || pdfContent.length === 0) {
     res.status(400).json({ error: "Campos obrigatórios ausentes: Título, Autor, Categoria, Descrição ou Conteúdo de páginas." });
@@ -1859,7 +1881,15 @@ app.post("/api/admin/books", (req, res) => {
     publishDate: publishDate || new Date().getFullYear().toString(),
     pdfContent,
     audioChapters: audiobookAvailable ? (audioChapters || pdfContent.map((_: any, i: number) => ({ title: `Capítulo ${i + 1}`, startPage: i, durationSeconds: 120 }))) : undefined,
-    copyright: copyright || { status: "commercial", licenseType: "purchase_required" }
+    copyright: copyright || { status: "commercial", licenseType: "purchase_required" },
+    summary: summary || [],
+    status: status || "Draft",
+    isbn: isbn || undefined,
+    keywords: keywords || [],
+    tags: tags || [],
+    accessType: accessType || "free",
+    isFeatured: !!isFeatured,
+    createdAt: new Date().toISOString()
   };
 
   db.books.push(newBook);
@@ -2106,7 +2136,7 @@ app.post("/api/notifications/register-token", (req, res) => {
 });
 
 app.post("/api/notifications/preferences", (req, res) => {
-  const { userId, notifyInApp, notifyPushPrefs } = req.body;
+  const { userId, notifyInApp, notifyPushPrefs, readingReminderEnabled, readingReminderTime } = req.body;
   if (!userId) {
     res.status(400).json({ error: "UserId é obrigatório." });
     return;
@@ -2121,6 +2151,8 @@ app.post("/api/notifications/preferences", (req, res) => {
   if (!user.preferences) user.preferences = {};
   if (notifyInApp) user.preferences.notifyInApp = notifyInApp;
   if (notifyPushPrefs) user.preferences.notifyPushPrefs = notifyPushPrefs;
+  if (readingReminderEnabled !== undefined) user.preferences.readingReminderEnabled = !!readingReminderEnabled;
+  if (readingReminderTime !== undefined) user.preferences.readingReminderTime = readingReminderTime;
   
   writeDb(db);
   res.json({ success: true, preferences: user.preferences });
@@ -2190,47 +2222,6 @@ app.post("/api/progress", (req, res) => {
 
   const now = new Date().toISOString();
 
-  // Handle Reading Sessions / Statistics increments
-  const statsIndex = db.stats.findIndex((s) => s.userId === userId);
-  if (statsIndex !== -1) {
-    // Increment pages read count if user moves forward
-    const oldProgress = db.progress[progressIndex];
-    if (!oldProgress) {
-      db.stats[statsIndex].booksInProgressCount += 1;
-      db.stats[statsIndex].pagesReadCount += (lastPage + 1);
-    } else {
-      if (lastPage > oldProgress.lastPage) {
-        db.stats[statsIndex].pagesReadCount += (lastPage - oldProgress.lastPage);
-      }
-    }
-
-    // Mark as completed if we hit the final page
-    if (progressPercentage >= 100) {
-      // Check if it wasn't already completed
-      const wasCompleted = oldProgress && oldProgress.progressPercentage >= 100;
-      if (!wasCompleted) {
-        db.stats[statsIndex].booksCompletedCount += 1;
-        db.stats[statsIndex].booksInProgressCount = Math.max(0, db.stats[statsIndex].booksInProgressCount - 1);
-      }
-    }
-  }
-
-  // Record reading session duration with active user tracking
-  if (statsIndex !== -1) {
-    const { readingSeconds } = req.body;
-    if (readingSeconds !== undefined && typeof readingSeconds === "number") {
-      // Add actual tracked reading minutes
-      db.stats[statsIndex].readingMinutes += (readingSeconds / 60);
-    } else {
-      // Minimal fallback to prevent stagnation
-      db.stats[statsIndex].readingMinutes += 0.1;
-    }
-    // Round to 1 decimal place to prevent floating-point representation drift (e.g. 1.33333333333)
-    db.stats[statsIndex].readingMinutes = Math.round(db.stats[statsIndex].readingMinutes * 10) / 10;
-    
-    db.stats[statsIndex].avgSessionMinutes = Math.round(db.stats[statsIndex].readingMinutes / Math.max(1, db.stats[statsIndex].booksInProgressCount + db.stats[statsIndex].booksCompletedCount));
-  }
-
   if (progressIndex === -1) {
     const newProgress: ReadingProgress = {
       userId,
@@ -2259,6 +2250,52 @@ app.post("/api/progress", (req, res) => {
       lastReadAt: now,
     };
   }
+
+  // Recalculate stats for this user to ensure absolute precision
+  let statsIndex = db.stats.findIndex((s) => s.userId === userId);
+  if (statsIndex === -1) {
+    const newStats = {
+      userId,
+      readingMinutes: 0,
+      listeningMinutes: 0,
+      booksCompletedCount: 0,
+      booksInProgressCount: 0,
+      pagesReadCount: 0,
+      avgSessionMinutes: 0,
+    };
+    db.stats.push(newStats);
+    statsIndex = db.stats.length - 1;
+  }
+
+  const userProgresses = db.progress.filter((p) => p.userId === userId);
+  const completedBooksCount = userProgresses.filter((p) => p.progressPercentage >= 100).length;
+  const booksInProgressCount = userProgresses.filter((p) => p.progressPercentage > 0 && p.progressPercentage < 100).length;
+
+  let calculatedPagesRead = 0;
+  userProgresses.forEach((p) => {
+    const b = db.books.find((bk) => bk.id === p.bookId);
+    if (b) {
+      if (p.progressPercentage >= 100) {
+        calculatedPagesRead += b.pages;
+      } else {
+        calculatedPagesRead += Math.min(b.pages, p.lastPage + 1);
+      }
+    }
+  });
+
+  db.stats[statsIndex].booksCompletedCount = completedBooksCount;
+  db.stats[statsIndex].booksInProgressCount = booksInProgressCount;
+  db.stats[statsIndex].pagesReadCount = calculatedPagesRead;
+
+  // Record reading session duration with active user tracking
+  const { readingSeconds } = req.body;
+  if (readingSeconds !== undefined && typeof readingSeconds === "number") {
+    db.stats[statsIndex].readingMinutes += (readingSeconds / 60);
+  } else {
+    db.stats[statsIndex].readingMinutes += 0.1;
+  }
+  db.stats[statsIndex].readingMinutes = Math.round(db.stats[statsIndex].readingMinutes * 10) / 10;
+  db.stats[statsIndex].avgSessionMinutes = Math.round(db.stats[statsIndex].readingMinutes / Math.max(1, completedBooksCount + booksInProgressCount));
 
   writeDb(db);
   res.json(progressIndex === -1 ? db.progress[db.progress.length - 1] : db.progress[progressIndex]);

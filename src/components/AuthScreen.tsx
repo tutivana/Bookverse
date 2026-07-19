@@ -29,8 +29,8 @@ export default function AuthScreen({
   }, [defaultIsLogin]);
 
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("tutojose1@gmail.com");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -72,25 +72,6 @@ export default function AuthScreen({
     }, 1000);
     return () => clearInterval(timer);
   }, [lockoutTime]);
-
-  // Auto pre-fill based on selected role tab for quick testing & role differentiation
-  useEffect(() => {
-    if (!isLogin) return; // don't prefill during registration
-    
-    if (selectedRole === "super") {
-      setEmail("tutojose1@gmail.com");
-      setPassword("123456");
-    } else if (selectedRole === "admin") {
-      setEmail("admin@bookverse.com");
-      setPassword("123456");
-    } else if (selectedRole === "moderador") {
-      setEmail("moderador@bookverse.com");
-      setPassword("123456");
-    } else {
-      setEmail("leitor@bookverse.com");
-      setPassword("123456");
-    }
-  }, [selectedRole, isLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

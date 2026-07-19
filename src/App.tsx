@@ -124,6 +124,56 @@ export default function App() {
     const interval = setInterval(loadNotifs, 5000);
     return () => clearInterval(interval);
   }, [user]);
+  
+  // Browser Reading Reminder Scheduler
+  useEffect(() => {
+    if (!user || !user.preferences?.readingReminderEnabled || !user.preferences?.readingReminderTime) {
+      return;
+    }
+
+    const checkReminder = () => {
+      const now = new Date();
+      const currentHours = String(now.getHours()).padStart(2, '0');
+      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+      const reminderTime = user.preferences?.readingReminderTime; // "HH:MM"
+
+      if (currentTimeStr === reminderTime) {
+        const todayStr = now.toISOString().split('T')[0]; // "YYYY-MM-DD"
+        const lastNotified = localStorage.getItem(`last_reading_reminder_notified_${user.id}`);
+
+        if (lastNotified !== todayStr) {
+          if ("Notification" in window) {
+            if (Notification.permission === "granted") {
+              new Notification("Hora da Leitura! 📚", {
+                body: "Está na hora de manter sua meta diária de leitura no BookVerse. Abra o app e leia seu livro favorito!",
+                icon: "/favicon.ico"
+              });
+              localStorage.setItem(`last_reading_reminder_notified_${user.id}`, todayStr);
+            } else if (Notification.permission === "default") {
+              Notification.requestPermission().then((permission) => {
+                if (permission === "granted") {
+                  new Notification("Hora da Leitura! 📚", {
+                    body: "Está na hora de manter sua meta diária de leitura no BookVerse. Abra o app e leia seu livro favorito!",
+                    icon: "/favicon.ico"
+                  });
+                  localStorage.setItem(`last_reading_reminder_notified_${user.id}`, todayStr);
+                }
+              });
+            }
+          }
+        }
+      }
+    };
+
+    // Check every 30 seconds
+    const intervalId = setInterval(checkReminder, 30000);
+    
+    // Also run immediately
+    checkReminder();
+
+    return () => clearInterval(intervalId);
+  }, [user, user?.preferences?.readingReminderEnabled, user?.preferences?.readingReminderTime]);
 
   // Support deep linking to books on mount
   useEffect(() => {
@@ -302,6 +352,28 @@ export default function App() {
       }
     }
   }, [currentView, user]);
+
+  // Listener para monitorar mudanças de hash (útil no mobile)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const isParamAdmin = window.location.hash === "#admin" || window.location.hash === "#/admin";
+      if (isParamAdmin) {
+        setIsAdminPortal(true);
+        if (user) {
+          const isAuthorized = user.role === "Super Administrador" || user.role === "Administrador";
+          if (isAuthorized) {
+            setCurrentView("admin");
+          } else {
+            setCurrentView("library");
+          }
+        } else {
+          setCurrentView("auth");
+        }
+      }
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [user]);
 
   // Fetch catalog, progress, and statistics whenever the active user changes
   const loadUserData = async () => {
@@ -646,19 +718,19 @@ export default function App() {
           </nav>
 
           {/* Right User actions */}
-          <div className="flex items-center gap-3 relative">
+          <div className="flex items-center gap-1.5 sm:gap-3 relative">
             {user ? (
               <>
                 {/* Notification Bell */}
                 <div>
                   <button
                     onClick={() => setIsNotifOpen(true)}
-                    className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl relative transition cursor-pointer flex items-center justify-center shadow-lg hover:border-zinc-700 hover:text-zinc-100"
+                    className="p-1.5 sm:p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-lg sm:rounded-xl relative transition cursor-pointer flex items-center justify-center shadow-lg hover:border-zinc-700 hover:text-zinc-100"
                     title="Notificações"
                   >
-                    <Bell className="w-4 h-4" />
+                    <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-zinc-900 animate-pulse">
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] sm:text-[9px] font-bold w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full flex items-center justify-center border border-zinc-900 animate-pulse">
                         {unreadCount}
                       </span>
                     )}
@@ -668,7 +740,7 @@ export default function App() {
                 {/* Profile Dropdown Trigger */}
                 <button
                   onClick={() => setCurrentView("profile")}
-                  className={`flex items-center gap-2 p-1.5 rounded-xl border transition cursor-pointer ${
+                  className={`flex items-center gap-1 sm:gap-2 p-1 sm:p-1.5 rounded-lg sm:rounded-xl border transition cursor-pointer ${
                     currentView === "profile"
                       ? "bg-[#e2b874]/10 border-[#e2b874] text-[#e2b874]"
                       : "hover:bg-zinc-800 border-zinc-800 bg-zinc-900 text-zinc-100"
@@ -678,11 +750,11 @@ export default function App() {
                     <img
                       src={user.avatarUrl || getInitialsAvatarSvg(user.name)}
                       alt={user.name}
-                      className="w-7 h-7 rounded-lg border border-zinc-800 object-cover"
+                      className="w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg border border-zinc-800 object-cover"
                       referrerPolicy="no-referrer"
                     />
                     {(user.role === "Super Administrador" || user.role === "Administrador") && (
-                      <span className="absolute -top-1 -right-1 bg-amber-500 w-2.5 h-2.5 rounded-full border border-zinc-900 shadow-[0_0_6px_#f59e0b] animate-pulse" title="Administrador" />
+                      <span className="absolute -top-0.5 -right-0.5 bg-amber-500 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full border border-zinc-900 shadow-[0_0_6px_#f59e0b] animate-pulse" title="Administrador" />
                     )}
                   </div>
                   <div className="flex flex-col items-start leading-tight">

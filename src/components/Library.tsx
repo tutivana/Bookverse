@@ -329,7 +329,7 @@ export default function Library({
                             className="flex-grow bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
                           >
                             <BookOpen className="w-3.5 h-3.5" />
-                            <span>Ler</span>
+                            <span className="hidden sm:inline">Ler</span>
                           </button>
                           {book.audiobookAvailable && (
                             <button
@@ -501,7 +501,7 @@ export default function Library({
                             className="flex-1 bg-[#e2b874] hover:bg-[#c59e5f] text-zinc-950 text-[10px] sm:text-xs font-bold h-10 rounded-xl flex items-center justify-center gap-1 transition active:scale-[0.97] cursor-pointer"
                           >
                             <BookOpen className="w-3.5 h-3.5" />
-                            <span>Ler</span>
+                            <span className="hidden sm:inline">Ler</span>
                           </button>
                           {book.audiobookAvailable && (
                             <button

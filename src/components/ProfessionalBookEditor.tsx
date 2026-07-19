@@ -13,7 +13,7 @@ import { adminAiAutocompleteBook, adminAiWritingAssistant } from "../lib/api";
 
 interface ProfessionalBookEditorProps {
   book: Book | null;
-  onSave: (updatedBookData: Partial<Book>) => Promise<void>;
+  onSave: (updatedBookData: Partial<Book>, options?: { keepOpen?: boolean; silent?: boolean }) => Promise<any>;
   onClose: () => void;
   loading: boolean;
   currentAdmin: { name: string; role: string; email: string };
@@ -36,6 +36,32 @@ interface VersionRecord {
   changesDescription: string;
   chapters: EditorChapter[];
   metadata: any;
+}
+
+export function getLastOrderedListNumber(markdownContent: string): number {
+  if (!markdownContent) return 0;
+  const lines = markdownContent.split("\n");
+  let lastNum = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const match = line.match(/^(\d+)\.\s+/);
+    if (match) {
+      lastNum = parseInt(match[1], 10);
+    }
+  }
+  return lastNum;
+}
+
+export function preprocessMarkdownLists(content: string): string {
+  if (!content) return content;
+  return content
+    .split("\n")
+    .map((line) => {
+      // Matches lines that start with spaces/tabs, followed by digits, a period, and then a character that is NOT a space, period, or digit.
+      // E.g., "1.texto" -> "1. texto"
+      return line.replace(/^(\s*)(\d+)\.(?!\s|\d|\.)/g, "$1$2. ");
+    })
+    .join("\n");
 }
 
 export default function ProfessionalBookEditor({
@@ -181,15 +207,37 @@ export default function ProfessionalBookEditor({
       </blockquote>
     ),
     ul: ({ children }: any) => (
-      <ul className="list-disc pl-6 my-4 space-y-2 text-sm md:text-base text-left">
+      <ul className="book-verse-ul pl-6 my-4 space-y-2 text-sm md:text-base text-left">
         {children}
       </ul>
     ),
-    ol: ({ children }: any) => (
-      <ol className="list-decimal pl-6 my-4 space-y-2 text-sm md:text-base text-left">
-        {children}
-      </ol>
-    ),
+    ol: ({ children, start }: any) => {
+      const activePageContent = getActivePage()?.content || "";
+      let finalStart = start;
+
+      if (activePageContent.includes("<!-- continue-ordered-list -->")) {
+        const flatPages: { pageId: string; content: string }[] = [];
+        chapters.forEach((c) => {
+          c.pages.forEach((p) => {
+            flatPages.push({ pageId: p.id, content: p.content });
+          });
+        });
+        const activeIdx = flatPages.findIndex((p) => p.pageId === selectedPageId);
+        if (activeIdx > 0) {
+          const prevPageContent = flatPages[activeIdx - 1].content;
+          const lastNum = getLastOrderedListNumber(prevPageContent);
+          if (lastNum > 0) {
+            finalStart = lastNum + 1;
+          }
+        }
+      }
+
+      return (
+        <ol start={finalStart} className="book-verse-ol pl-6 my-4 space-y-2 text-sm md:text-base text-left">
+          {children}
+        </ol>
+      );
+    },
     li: ({ children }: any) => (
       <li className="leading-relaxed">
         {children}
@@ -373,13 +421,7 @@ export default function ProfessionalBookEditor({
 
     try {
       setLastSavedText("Sincronizando...");
-      const res = await fetch(`/api/admin/books/${book.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Erro de resposta do servidor");
-      
+      await onSave(payload, { keepOpen: true, silent: true });
       const now = new Date();
       setLastSavedText(`Sincronizado às ${now.toLocaleTimeString()}`);
       setIsDirty(false);
@@ -394,6 +436,21 @@ export default function ProfessionalBookEditor({
     setIsDirty(true);
     saveDraftToCloud(nextChapters);
   };
+
+  // Prevent leaving or reloading with unsaved edits
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "Existem alterações não salvas. Tem certeza que deseja sair?";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
 
   // INITIALIZE AUTO-SAVE SIMULATOR (Stable interval using updated ref closures)
   const autoSaveCallbackRef = useRef<() => void>(undefined);
@@ -776,49 +833,123 @@ export default function ProfessionalBookEditor({
     };
   };
 
-  // REAL PLAIN TEXT / MARKDOWN EXTRACTOR
+  // REAL PLAIN TEXT / MARKDOWN EXTRACTOR WITH ROBUST MD STRUCTURE SUPPORT
   const extractTXTContent = async (file: File): Promise<{ title: string; author: string; chapters: EditorChapter[] }> => {
-    setImportStatus("Lendo arquivo de texto...");
-    setImportLogs((prev) => [...prev, "[TEXT] Executando leitura local do arquivo..."]);
+    const isMd = file.name.toLowerCase().endsWith(".md");
+    setImportStatus(isMd ? "Lendo arquivo Markdown (.md)..." : "Lendo arquivo de texto...");
+    setImportLogs((prev) => [...prev, isMd ? "[MARKDOWN] Executando leitura local do arquivo .md..." : "[TEXT] Executando leitura local do arquivo..."]);
     
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const text = reader.result as string;
-        const lines = text.split("\n");
-        const pages: EditorPage[] = [];
-        let currentPageText = "";
-        let pageIndex = 1;
+        const lines = text.split(/\r?\n/);
+        
+        // Check if content has markdown headings or explicit page breaks
+        const hasChapters = lines.some(line => /^#{1,3}\s+.+/.test(line.trim()));
+        const hasPageBreaks = lines.some(line => line.trim() === "---");
 
-        for (const line of lines) {
-          if (currentPageText.length + line.length > 1500) {
+        let chaptersList: EditorChapter[] = [];
+
+        if (hasChapters || hasPageBreaks) {
+          setImportLogs((prev) => [...prev, "[MARKDOWN] Estrutura Markdown com capítulos ou quebras detectada."]);
+          let currentChapterTitle = "Capítulo I: Introdução";
+          let currentPages: EditorPage[] = [];
+          let currentPageText: string[] = [];
+          let pageIndexInChapter = 1;
+
+          const finalizePage = () => {
+            const pageContent = currentPageText.join("\n").trim();
+            if (pageContent) {
+              currentPages.push({
+                id: `page-md-${pageIndexInChapter}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                content: pageContent
+              });
+              pageIndexInChapter++;
+            }
+            currentPageText = [];
+          };
+
+          const finalizeChapter = () => {
+            finalizePage();
+            if (currentPages.length > 0 || currentChapterTitle) {
+              chaptersList.push({
+                id: `chapter-md-${chaptersList.length + 1}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                title: currentChapterTitle || `Capítulo ${chaptersList.length + 1}`,
+                pages: currentPages.length > 0 ? currentPages : [{ id: `page-empty-${Date.now()}`, content: "# Vazio" }]
+              });
+            }
+            currentPages = [];
+            pageIndexInChapter = 1;
+          };
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+
+            const chapMatch = /^#{1,3}\s+(.+)$/.exec(trimmed);
+            if (chapMatch) {
+              if (currentPageText.length > 0 || currentPages.length > 0) {
+                finalizeChapter();
+              }
+              currentChapterTitle = chapMatch[1].trim();
+              currentPageText.push(line);
+            } else if (trimmed === "---") {
+              finalizePage();
+            } else {
+              currentPageText.push(line);
+            }
+          }
+
+          if (currentPageText.length > 0 || currentPages.length > 0) {
+            finalizeChapter();
+          }
+
+          if (chaptersList.length === 0) {
+            chaptersList.push({
+              id: `chapter-empty-${Date.now()}`,
+              title: "Capítulo I",
+              pages: [{ id: `page-empty-${Date.now()}`, content: "# Vazio" }]
+            });
+          }
+        } else {
+          setImportLogs((prev) => [...prev, "[TEXT] Sem tags estruturais de MD. Usando divisão automática por tamanho..."]);
+          const pages: EditorPage[] = [];
+          let currentPageText = "";
+          let pageIndex = 1;
+
+          for (const line of lines) {
+            if (currentPageText.length + line.length > 1500) {
+              pages.push({
+                id: `page-txt-${pageIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                content: `# Página ${pageIndex}\n\n${currentPageText.trim()}`
+              });
+              currentPageText = "";
+              pageIndex++;
+            }
+            currentPageText += line + "\n";
+          }
+          if (currentPageText.trim()) {
             pages.push({
               id: `page-txt-${pageIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
               content: `# Página ${pageIndex}\n\n${currentPageText.trim()}`
             });
-            currentPageText = "";
-            pageIndex++;
           }
-          currentPageText += line + "\n";
-        }
-        if (currentPageText.trim()) {
-          pages.push({
-            id: `page-txt-${pageIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-            content: `# Página ${pageIndex}\n\n${currentPageText.trim()}`
+
+          chaptersList.push({
+            id: `chapter-txt-1-${Date.now()}`,
+            title: "Capítulo I: Conteúdo Principal",
+            pages: pages.length > 0 ? pages : [{ id: `page-empty-${Date.now()}`, content: "# Vazio" }]
           });
         }
 
         resolve({
           title: file.name.replace(/\.(txt|md)$/i, ""),
-          author: "Importado via Texto",
-          chapters: [{
-            id: `chapter-txt-1-${Date.now()}`,
-            title: "Capítulo I: Conteúdo Principal",
-            pages: pages.length > 0 ? pages : [{ id: `page-empty-${Date.now()}`, content: "# Vazio" }]
-          }]
+          author: isMd ? "Importado via Markdown" : "Importado via Texto",
+          chapters: chaptersList
         });
       };
-      reader.onerror = () => reject(new Error("Erro ao decodificar arquivo TXT/MD."));
+      reader.onerror = () => reject(new Error("Erro ao ler o arquivo TXT/MD."));
       reader.readAsText(file);
     });
   };
@@ -1215,6 +1346,80 @@ export default function ProfessionalBookEditor({
     updateChaptersAndSync(nextChapters);
   };
 
+  // DRAG & DROP PAGES REORDERING
+  const handleDragDropPage = (
+    sourceChapterId: string,
+    sourcePageId: string,
+    targetChapterId: string,
+    targetPageId?: string
+  ) => {
+    if (sourcePageId === targetPageId) return;
+
+    const sourceChapIdx = chapters.findIndex((c) => c.id === sourceChapterId);
+    const targetChapIdx = chapters.findIndex((c) => c.id === targetChapterId);
+    if (sourceChapIdx === -1 || targetChapIdx === -1) return;
+
+    const sourceChap = chapters[sourceChapIdx];
+    const targetChap = chapters[targetChapIdx];
+
+    const sourcePageIdx = sourceChap.pages.findIndex((p) => p.id === sourcePageId);
+    if (sourcePageIdx === -1) return;
+
+    const pageToMove = sourceChap.pages[sourcePageIdx];
+
+    if (sourceChapterId === targetChapterId) {
+      // Reordering in same chapter
+      const updatedPages = [...sourceChap.pages];
+      updatedPages.splice(sourcePageIdx, 1);
+      
+      let targetPageIdx = targetPageId 
+        ? updatedPages.findIndex((p) => p.id === targetPageId) 
+        : updatedPages.length;
+      
+      if (targetPageIdx === -1) targetPageIdx = updatedPages.length;
+
+      updatedPages.splice(targetPageIdx, 0, pageToMove);
+
+      const nextChapters = chapters.map((chap) => {
+        if (chap.id === sourceChapterId) {
+          return { ...chap, pages: updatedPages };
+        }
+        return chap;
+      });
+
+      setSelectedChapterId(targetChapterId);
+      setSelectedPageId(sourcePageId);
+      updateChaptersAndSync(nextChapters);
+    } else {
+      // Moving to different chapter
+      if (sourceChap.pages.length <= 1) {
+        alert("Não é possível mover a única página de um capítulo. Adicione outra página a este capítulo antes de transferi-la.");
+        return;
+      }
+
+      const nextChapters = chapters.map((chap, idx) => {
+        if (idx === sourceChapIdx) {
+          return { ...chap, pages: chap.pages.filter((p) => p.id !== sourcePageId) };
+        }
+        if (idx === targetChapIdx) {
+          const updatedPages = [...chap.pages];
+          let insertIdx = targetPageId 
+            ? updatedPages.findIndex((p) => p.id === targetPageId)
+            : updatedPages.length;
+          
+          if (insertIdx === -1) insertIdx = updatedPages.length;
+          updatedPages.splice(insertIdx, 0, pageToMove);
+          return { ...chap, pages: updatedPages };
+        }
+        return chap;
+      });
+
+      setSelectedChapterId(targetChapterId);
+      setSelectedPageId(sourcePageId);
+      updateChaptersAndSync(nextChapters);
+    }
+  };
+
   // MERGE / SPLIT CHAPTERS
   const handleSplitChapter = (chapterId: string) => {
     const chapterObj = chapters.find((c) => c.id === chapterId);
@@ -1459,9 +1664,11 @@ export default function ProfessionalBookEditor({
     };
 
     try {
-      await onSave(payload);
+      const savedBook = await onSave(payload, { keepOpen: true });
+      if (savedBook && savedBook.id) {
+        loadedBookIdRef.current = savedBook.id;
+      }
       alert(`Livro guardado com sucesso! Status mantido como: ${currentStatus}`);
-      onClose();
     } catch (err) {
       alert("Falha ao guardar o livro: " + err);
     } finally {
@@ -2039,9 +2246,31 @@ export default function ProfessionalBookEditor({
                         <div key={chap.id} className="space-y-1">
                           
                           {/* Chapter Item Header */}
-                          <div className={`p-2 rounded-xl flex items-center justify-between gap-1 transition ${
-                            isSelectedChapter ? "bg-zinc-100/80 border border-zinc-200" : "hover:bg-zinc-50 border border-transparent"
-                          }`}>
+                          <div 
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.currentTarget.classList.add("bg-[#8a7e58]/10", "border-dashed", "border-[#8a7e58]");
+                            }}
+                            onDragLeave={(e) => {
+                              e.currentTarget.classList.remove("bg-[#8a7e58]/10", "border-dashed", "border-[#8a7e58]");
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.currentTarget.classList.remove("bg-[#8a7e58]/10", "border-dashed", "border-[#8a7e58]");
+                              try {
+                                const dataStr = e.dataTransfer.getData("text/plain");
+                                if (dataStr) {
+                                  const { chapterId: sourceChapterId, pageId: sourcePageId } = JSON.parse(dataStr);
+                                  handleDragDropPage(sourceChapterId, sourcePageId, chap.id, undefined);
+                                }
+                              } catch (err) {
+                                console.error("Erro no drop no capítulo:", err);
+                              }
+                            }}
+                            className={`p-2 rounded-xl flex items-center justify-between gap-1 transition ${
+                              isSelectedChapter ? "bg-zinc-100/80 border border-zinc-200" : "hover:bg-zinc-50 border border-transparent"
+                            }`}
+                          >
                             <div className="flex items-center gap-1.5 min-w-0 flex-grow">
                               <span className="text-[10px] text-gray-400 font-mono">#{chapIdx + 1}</span>
                               <input
@@ -2102,15 +2331,50 @@ export default function ProfessionalBookEditor({
                               return (
                                 <div 
                                   key={page.id}
+                                  draggable={true}
+                                  onDragStart={(e) => {
+                                    e.stopPropagation();
+                                    e.dataTransfer.setData("text/plain", JSON.stringify({ chapterId: chap.id, pageId: page.id }));
+                                    e.dataTransfer.effectAllowed = "move";
+                                    e.currentTarget.classList.add("opacity-40", "border-dashed", "border-[#8a7e58]");
+                                  }}
+                                  onDragEnd={(e) => {
+                                    e.stopPropagation();
+                                    e.currentTarget.classList.remove("opacity-40", "border-dashed", "border-[#8a7e58]");
+                                  }}
+                                  onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    e.currentTarget.classList.add("bg-[#8a7e58]/10", "border-dashed", "border-[#8a7e58]/30");
+                                  }}
+                                  onDragLeave={(e) => {
+                                    e.stopPropagation();
+                                    e.currentTarget.classList.remove("bg-[#8a7e58]/10", "border-dashed", "border-[#8a7e58]/30");
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    e.currentTarget.classList.remove("bg-[#8a7e58]/10", "border-dashed", "border-[#8a7e58]/30");
+                                    try {
+                                      const dataStr = e.dataTransfer.getData("text/plain");
+                                      if (dataStr) {
+                                        const { chapterId: sourceChapterId, pageId: sourcePageId } = JSON.parse(dataStr);
+                                        handleDragDropPage(sourceChapterId, sourcePageId, chap.id, page.id);
+                                      }
+                                    } catch (err) {
+                                      console.error("Erro no drop da página:", err);
+                                    }
+                                  }}
                                   onClick={() => {
                                     setSelectedChapterId(chap.id);
                                     setSelectedPageId(page.id);
                                   }}
-                                  className={`p-1.5 rounded-lg flex items-center justify-between gap-1 cursor-pointer transition text-[10px] ${
+                                  className={`p-1.5 rounded-lg flex items-center justify-between gap-1 cursor-grab active:cursor-grabbing transition text-[10px] select-none ${
                                     isSelectedPage 
                                       ? "bg-[#8a7e58]/15 text-[#8a7e58] border border-[#8a7e58]/20 font-bold" 
                                       : "hover:bg-zinc-100 text-gray-500 hover:text-zinc-800"
                                   }`}
+                                  title="Arraste para mover ou reordenar esta página"
                                 >
                                   <span className="truncate">
                                     Pág. {pageIdx + 1} - {page.content.substring(0, 15).replace(/[#*_>\[\]]/g, "") || "Vazia..."}
@@ -2412,6 +2676,36 @@ export default function ProfessionalBookEditor({
                       <span>Sumário Sincronizado</span>
                     </div>
 
+                    {/* Toggle de Continuidade de Lista Ordenada */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const activePage = getActivePage();
+                        if (!activePage) return;
+                        const currentContent = activePage.content;
+                        if (currentContent.includes("<!-- continue-ordered-list -->")) {
+                          const updated = currentContent
+                            .replace("<!-- continue-ordered-list -->\n", "")
+                            .replace("<!-- continue-ordered-list -->", "");
+                          updateActivePageContent(updated);
+                        } else {
+                          const updated = "<!-- continue-ordered-list -->\n" + currentContent;
+                          updateActivePageContent(updated);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                        getActivePage()?.content.includes("<!-- continue-ordered-list -->")
+                          ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                          : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"
+                      }`}
+                      title="Clique para alternar se a lista numerada desta página deve continuar a numeração da página anterior"
+                    >
+                      <ListOrdered className="w-3.5 h-3.5 text-[#8a7e58]" />
+                      {getActivePage()?.content.includes("<!-- continue-ordered-list -->")
+                        ? "Listas: Continuar Numeração"
+                        : "Listas: Reiniciar Numeração"}
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => setShowMarkdownGuide(true)}
@@ -2442,8 +2736,38 @@ export default function ProfessionalBookEditor({
                             
                             {/* Visual Left Input Area */}
                             <div className="flex flex-col h-full space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Inserir Conteúdo Rico</span>
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Inserir Conteúdo Rico</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const activePage = getActivePage();
+                                      if (!activePage) return;
+                                      const currentContent = activePage.content;
+                                      if (currentContent.includes("<!-- continue-ordered-list -->")) {
+                                        const updated = currentContent
+                                          .replace("<!-- continue-ordered-list -->\n", "")
+                                          .replace("<!-- continue-ordered-list -->", "");
+                                        updateActivePageContent(updated);
+                                      } else {
+                                        const updated = "<!-- continue-ordered-list -->\n" + currentContent;
+                                        updateActivePageContent(updated);
+                                      }
+                                    }}
+                                    className={`px-1.5 py-0.5 rounded text-[8px] font-bold border transition flex items-center gap-0.5 cursor-pointer ${
+                                      getActivePage()?.content.includes("<!-- continue-ordered-list -->")
+                                        ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                                        : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                                    title="Alternar se a lista numerada desta página deve continuar a numeração da anterior"
+                                  >
+                                    <ListOrdered className="w-2.5 h-2.5 text-[#8a7e58]" />
+                                    {getActivePage()?.content.includes("<!-- continue-ordered-list -->")
+                                      ? "Continuar Numeração"
+                                      : "Reiniciar Numeração"}
+                                  </button>
+                                </div>
                                 <div className="flex items-center gap-1 bg-zinc-100 px-1.5 py-0.5 rounded-lg border border-zinc-200 text-[10px]">
                                   <button
                                     type="button"
@@ -2522,7 +2846,7 @@ export default function ProfessionalBookEditor({
                                 className={`w-full flex-grow p-6 border rounded-2xl overflow-y-auto shadow-inner leading-relaxed font-serif text-left transition-colors duration-300 ${previewThemeStyles[previewTheme].cardBg}`}
                               >
                                 <ReactMarkdown components={getFaithfulMarkdownComponents(previewTheme) as any}>
-                                  {getActivePage()?.content || "_Nenhum conteúdo nesta página ainda._"}
+                                  {preprocessMarkdownLists(getActivePage()?.content || "_Nenhum conteúdo nesta página ainda._")}
                                 </ReactMarkdown>
                               </div>
                             </div>
@@ -2714,7 +3038,7 @@ export default function ProfessionalBookEditor({
                       className="flex-grow py-4 font-serif leading-relaxed text-left max-w-none transition-colors duration-300"
                     >
                       <ReactMarkdown components={getFaithfulMarkdownComponents(previewTheme) as any}>
-                        {getActivePage()?.content || "*Sem conteúdo nesta página.*"}
+                        {preprocessMarkdownLists(getActivePage()?.content || "*Sem conteúdo nesta página.*")}
                       </ReactMarkdown>
                     </div>
 
@@ -3068,62 +3392,75 @@ export default function ProfessionalBookEditor({
                 </div>
 
                 <div className="flex-grow overflow-y-auto pr-1 text-sm text-gray-600 space-y-4">
-                  <p className="text-xs text-gray-500">
-                    O BookVerse utiliza Markdown padrão para formatação rica de livros. Veja abaixo as regras básicas de formatação simples:
+                  <p className="text-xs text-gray-500 font-sans">
+                    O BookVerse utiliza regras rígidas e claras de Markdown para estruturar e formatar os livros. Siga estas diretrizes para garantir uma formatação perfeita:
                   </p>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50 space-y-1 text-xs">
-                      <span className="font-bold text-[#8a7e58] uppercase text-[9px] block">Títulos</span>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800"># Capítulo 1</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">## Subtítulo</p>
-                      <span className="text-gray-400 text-[10px] block">Inicia sumários ou capítulos</span>
+                  <div className="grid grid-cols-1 gap-4">
+                    {/* REGRA DE CAPÍTULOS */}
+                    <div className="border border-[#e1dbbf] rounded-xl p-3 bg-[#faf9f5] space-y-1 text-xs">
+                      <span className="font-bold text-[#8a7e58] uppercase text-[10px] block">📌 Regra Rígida: Capítulos (Painel Lateral)</span>
+                      <p className="text-gray-700 font-sans leading-relaxed">
+                        Para que um capítulo seja reconhecido, mapeado e exibido corretamente no <strong>painel lateral</strong>, ele deve obrigatoriamente iniciar com um título usando H1 ou H2:
+                      </p>
+                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800 w-fit"># Capítulo I: O Início</p>
+                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800 w-fit">## Capítulo II: A Jornada</p>
+                      <span className="text-gray-500 text-[10px] block font-sans">Ao importar um arquivo <strong>.md</strong>, o sistema dividirá automaticamente os capítulos usando esta regra.</span>
                     </div>
 
-                    <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50 space-y-1 text-xs">
-                      <span className="font-bold text-[#8a7e58] uppercase text-[9px] block">Ênfase Visual</span>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">**texto em negrito**</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">*texto em itálico*</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">~~texto tachado~~</p>
+                    {/* REGRA DE PARÁGRAFOS */}
+                    <div className="border border-red-100 rounded-xl p-3 bg-red-50/50 space-y-1 text-xs">
+                      <span className="font-bold text-red-800 uppercase text-[10px] block">🚫 Regra de Parágrafo & Evitar Duplicações</span>
+                      <p className="text-gray-700 font-sans leading-relaxed">
+                        Use <strong>estritamente uma linha em branco (duplo Enter)</strong> para separar parágrafos.
+                      </p>
+                      <div className="flex gap-2 font-mono text-[10px] my-1">
+                        <div className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded">✅ Correto:<br/>Parágrafo 1<br/>[linha em branco]<br/>Parágrafo 2</div>
+                        <div className="bg-red-100 text-red-800 px-2 py-1 rounded">❌ Incorreto:<br/>Parágrafo 1&lt;br&gt;<br/>Parágrafo 2</div>
+                      </div>
+                      <p className="text-red-700 font-sans leading-relaxed">
+                        <strong>É proibido usar tags &lt;br&gt; ou &lt;br /&gt;</strong> em conjunto com linhas em branco. Misturá-los gera espaçamentos duplicados inconsistentes e desnecessários na renderização.
+                      </p>
                     </div>
 
+                    {/* REGRA DE QUEBRA DE PÁGINA */}
                     <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50 space-y-1 text-xs">
-                      <span className="font-bold text-[#8a7e58] uppercase text-[9px] block">Quebra de Página</span>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">---</p>
-                      <span className="text-gray-400 text-[10px] block">Três hífens criam quebra de página</span>
+                      <span className="font-bold text-[#8a7e58] uppercase text-[10px] block">📄 Quebra de Página</span>
+                      <p className="text-gray-700 font-sans leading-relaxed">
+                        Para dividir um capítulo em páginas, use exatamente três hífens sozinhos em uma linha:
+                      </p>
+                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800 w-fit">---</p>
+                      <span className="text-gray-500 text-[10px] block font-sans">Isso divide o texto e inicia uma nova página limpa no leitor.</span>
                     </div>
 
-                    <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50 space-y-1 text-xs">
-                      <span className="font-bold text-[#8a7e58] uppercase text-[9px] block font-sans">Pular Linha / Quebra Manual</span>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">&lt;br /&gt; (Pular uma linha)</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">&lt;br /&gt;&lt;br /&gt; (Pular várias)</p>
-                      <span className="text-gray-400 text-[10px] block">Quebras adicionais se não houver</span>
+                    {/* OUTRAS FORMATAÇÕES */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="border border-zinc-100 rounded-xl p-2.5 bg-zinc-50 text-[11px] space-y-0.5">
+                        <span className="font-bold text-zinc-500 uppercase text-[8px] block">Estilos Básicos</span>
+                        <p className="font-mono text-zinc-700">**negrito**</p>
+                        <p className="font-mono text-zinc-700">*itálico*</p>
+                        <p className="font-mono text-zinc-700">~~tachado~~</p>
+                      </div>
+                      <div className="border border-zinc-100 rounded-xl p-2.5 bg-zinc-50 text-[11px] space-y-0.5">
+                        <span className="font-bold text-zinc-500 uppercase text-[8px] block">Estruturas Extras</span>
+                        <p className="font-mono text-zinc-700">&gt; Bloco de citação</p>
+                        <p className="font-mono text-zinc-700">- Lista de tópicos</p>
+                        <p className="font-mono text-zinc-700">:::note ... :::</p>
+                      </div>
                     </div>
 
-                    <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50 space-y-1 text-xs">
-                      <span className="font-bold text-[#8a7e58] uppercase text-[9px] block font-sans">Links Internos</span>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">[Ver Pág 5](#p5) (Salto de pág.)</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">[Cap. II](#capitulo-ii) (Capítulo)</p>
-                      <span className="text-gray-400 text-[10px] block">Redireciona para outras partes do livro</span>
-                    </div>
-
-                    <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50 space-y-1 text-xs">
-                      <span className="font-bold text-[#8a7e58] uppercase text-[9px] block font-sans">Citações e Notas</span>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">&gt; Bloco de citação</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">:::note\nNota especial\n:::</p>
-                    </div>
-
-                    <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50 space-y-1 text-xs col-span-1 md:col-span-2">
-                      <span className="font-bold text-[#8a7e58] uppercase text-[9px] block">Listas e Tabelas</span>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">- Item de Marcador</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">1. Item de Lista Ordenada</p>
-                      <p className="font-mono bg-zinc-200/60 px-1 py-0.5 rounded text-zinc-800">| Coluna A | Coluna B |</p>
+                    {/* IMPORTAÇÃO DE ARQUIVOS .MD */}
+                    <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/50 space-y-1 text-xs">
+                      <span className="font-bold text-blue-800 uppercase text-[10px] block">💾 Importação Direta de .md</span>
+                      <p className="text-gray-700 font-sans leading-relaxed">
+                        Você pode importar arquivos <strong>.md (Markdown)</strong> prontos! O BookVerse analisará a hierarquia de títulos (# ou ##) para estruturar os capítulos, e os hífens (---) para fatiar as páginas perfeitamente.
+                      </p>
                     </div>
                   </div>
 
-                  <div className="border-t border-[#ece9dc] pt-3 text-xs text-gray-500">
-                    <span className="font-semibold text-gray-700 block mb-1">Dica de Produtividade:</span>
-                    Você pode usar os botões da barra de formatação para inserir estes códigos automaticamente no cursor do editor.
+                  <div className="border-t border-[#ece9dc] pt-3 text-xs text-gray-500 font-sans">
+                    <span className="font-semibold text-gray-700 block mb-1">Dica de Edição:</span>
+                    O painel lateral reflete dinamicamente a estrutura de capítulos definidos com as regras acima.
                   </div>
                 </div>
 

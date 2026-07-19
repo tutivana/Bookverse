@@ -58,8 +58,18 @@ export default function NotificationCenter({
       const unreadCount = sorted.filter(n => !n.read).length;
       if (onUpdateCount) onUpdateCount(unreadCount);
     } catch (err: any) {
-      setError("Erro ao carregar notificações.");
-      console.error(err);
+      const isNetworkErr = err && (
+        err.name === "TypeError" || 
+        err.message?.includes("fetch") || 
+        err.message?.includes("NetworkError") || 
+        err.message?.includes("Failed to fetch")
+      );
+      if (isNetworkErr) {
+        console.warn("Transient network connection warning when fetching notifications in NotificationCenter:", err.message || err);
+      } else {
+        setError("Erro ao carregar notificações.");
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }

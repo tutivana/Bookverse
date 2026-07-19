@@ -53,9 +53,19 @@ export default function AdminNotificationCenter({ adminUser, onNavigate }: Admin
       // Sort cronologically desc
       const sorted = [...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setNotifications(sorted);
-    } catch (err) {
-      console.error(err);
-      setError("Erro ao carregar notificações administrativas.");
+    } catch (err: any) {
+      const isNetworkErr = err && (
+        err.name === "TypeError" || 
+        err.message?.includes("fetch") || 
+        err.message?.includes("NetworkError") || 
+        err.message?.includes("Failed to fetch")
+      );
+      if (isNetworkErr) {
+        console.warn("Transient network connection warning when fetching admin notifications:", err.message || err);
+      } else {
+        console.error(err);
+        setError("Erro ao carregar notificações administrativas.");
+      }
     } finally {
       setLoading(false);
     }

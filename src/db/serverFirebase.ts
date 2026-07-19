@@ -37,6 +37,31 @@ if (fs.existsSync(configPath)) {
   console.warn("[Firebase init Warning] firebase-applet-config.json not found.");
 }
 
+// In-memory cache of the last synchronized state of each document to prevent redundant Firestore writes
+export const syncCache: Record<string, string> = {};
+
+function cacheDocs(docs: any[]) {
+  docs.forEach(docSnap => {
+    syncCache[docSnap.ref.path] = JSON.stringify(docSnap.data());
+  });
+}
+
+function sanitize(val: any): any {
+  if (val === undefined) return null;
+  if (Array.isArray(val)) return val.map(sanitize);
+  if (val !== null && typeof val === "object") {
+    const clean: any = {};
+    for (const key of Object.keys(val)) {
+      const v = val[key];
+      if (v !== undefined) {
+        clean[key] = sanitize(v);
+      }
+    }
+    return clean;
+  }
+  return val;
+}
+
 const DEFAULT_TIMEOUT_MS = 3000;
 
 export function withTimeout<T>(promise: Promise<T>, ms = DEFAULT_TIMEOUT_MS): Promise<T> {
@@ -100,6 +125,7 @@ export async function pullFromFirestore(): Promise<any> {
     const usersSnap = await withTimeout(getDocs(collection(firestoreDb, "users")));
     if (!usersSnap.empty) {
       foundAny = true;
+      cacheDocs(usersSnap.docs);
       const rawUsers = usersSnap.docs.map(docSnap => {
         const data = docSnap.data();
         // Fallbacks for display fields to maximize consistency
@@ -118,6 +144,7 @@ export async function pullFromFirestore(): Promise<any> {
     const booksSnap = await withTimeout(getDocs(collection(firestoreDb, "books")));
     if (!booksSnap.empty) {
       foundAny = true;
+      cacheDocs(booksSnap.docs);
       const rawBooks = booksSnap.docs.map(docSnap => {
         const data = docSnap.data();
         // Fallbacks to maximize compatibility with original fields
@@ -136,6 +163,7 @@ export async function pullFromFirestore(): Promise<any> {
     const reportsSnap = await withTimeout(getDocs(collection(firestoreDb, "reports")));
     if (!reportsSnap.empty) {
       foundAny = true;
+      cacheDocs(reportsSnap.docs);
       loadedData.reports = uniqueById(reportsSnap.docs.map(docSnap => docSnap.data()));
     }
 
@@ -143,6 +171,7 @@ export async function pullFromFirestore(): Promise<any> {
     const logsSnap = await withTimeout(getDocs(collection(firestoreDb, "logs")));
     if (!logsSnap.empty) {
       foundAny = true;
+      cacheDocs(logsSnap.docs);
       loadedData.logs = uniqueById(logsSnap.docs.map(docSnap => docSnap.data()));
     }
 
@@ -150,6 +179,7 @@ export async function pullFromFirestore(): Promise<any> {
     const reqsSnap = await withTimeout(getDocs(collection(firestoreDb, "premiumRequests")));
     if (!reqsSnap.empty) {
       foundAny = true;
+      cacheDocs(reqsSnap.docs);
       loadedData.premiumRequests = uniqueById(reqsSnap.docs.map(docSnap => docSnap.data()));
     }
 
@@ -157,6 +187,7 @@ export async function pullFromFirestore(): Promise<any> {
     const ticketsSnap = await withTimeout(getDocs(collection(firestoreDb, "supportTickets")));
     if (!ticketsSnap.empty) {
       foundAny = true;
+      cacheDocs(ticketsSnap.docs);
       loadedData.supportTickets = uniqueById(ticketsSnap.docs.map(docSnap => docSnap.data()));
     }
 
@@ -164,6 +195,7 @@ export async function pullFromFirestore(): Promise<any> {
     const recoverySnap = await withTimeout(getDocs(collection(firestoreDb, "passwordRecovery")));
     if (!recoverySnap.empty) {
       foundAny = true;
+      cacheDocs(recoverySnap.docs);
       loadedData.passwordRecoveryRequests = uniqueById(recoverySnap.docs.map(docSnap => docSnap.data()));
     }
 
@@ -171,6 +203,7 @@ export async function pullFromFirestore(): Promise<any> {
     const settingsAppDoc = await withTimeout(getDoc(doc(firestoreDb, "settings", "app")));
     if (settingsAppDoc.exists()) {
       foundAny = true;
+      syncCache[settingsAppDoc.ref.path] = JSON.stringify(settingsAppDoc.data());
       const sData = settingsAppDoc.data();
       loadedData.subscriptionPrices = sData.subscriptionPrices || { monthly: 9.99, yearly: 89.99 };
       loadedData.aiEnabled = sData.aiEnabled !== undefined ? sData.aiEnabled : true;
@@ -179,11 +212,13 @@ export async function pullFromFirestore(): Promise<any> {
       const pricesDoc = await withTimeout(getDoc(doc(firestoreDb, "settings", "prices")));
       if (pricesDoc.exists()) {
         foundAny = true;
+        syncCache[pricesDoc.ref.path] = JSON.stringify(pricesDoc.data());
         loadedData.subscriptionPrices = pricesDoc.data().subscriptionPrices || { monthly: 9.99, yearly: 89.99 };
       }
       const globalDoc = await withTimeout(getDoc(doc(firestoreDb, "settings", "global")));
       if (globalDoc.exists()) {
         foundAny = true;
+        syncCache[globalDoc.ref.path] = JSON.stringify(globalDoc.data());
         loadedData.aiEnabled = globalDoc.data().aiEnabled !== undefined ? globalDoc.data().aiEnabled : true;
       }
     }
@@ -203,6 +238,7 @@ export async function pullFromFirestore(): Promise<any> {
       const snap = await withTimeout(getDocs(collectionGroup(firestoreDb, sub.name)));
       if (!snap.empty) {
         foundAny = true;
+        cacheDocs(snap.docs);
         const rawItems = snap.docs.map(docSnap => docSnap.data());
         loadedData[sub.targetKey] = uniqueById(rawItems);
       }
@@ -212,6 +248,7 @@ export async function pullFromFirestore(): Promise<any> {
     if (loadedData.reports.length === 0) {
       const repsGroupSnap = await withTimeout(getDocs(collectionGroup(firestoreDb, "reports")));
       if (!repsGroupSnap.empty) {
+        cacheDocs(repsGroupSnap.docs);
         loadedData.reports = uniqueById(repsGroupSnap.docs.map(docSnap => docSnap.data()));
       }
     }
@@ -242,6 +279,7 @@ export async function pushToFirestore(dbData: any): Promise<void> {
     const safeDelete = async (ref: any) => {
       try {
         await deleteDoc(ref);
+        delete syncCache[ref.path];
       } catch (e) {
         console.warn(`[pushToFirestore] Failed to delete ref: ${ref.path}`, e);
       }
@@ -249,24 +287,16 @@ export async function pushToFirestore(dbData: any): Promise<void> {
 
     // Helper to write document refs
     const safeSet = async (ref: any, data: any) => {
-      const sanitize = (val: any): any => {
-        if (val === undefined) return null;
-        if (Array.isArray(val)) return val.map(sanitize);
-        if (val !== null && typeof val === "object") {
-          const clean: any = {};
-          for (const key of Object.keys(val)) {
-            const v = val[key];
-            if (v !== undefined) {
-              clean[key] = sanitize(v);
-            }
-          }
-          return clean;
-        }
-        return val;
-      };
+      const sanitized = sanitize(data);
+      const dataStr = JSON.stringify(sanitized);
+      if (syncCache[ref.path] === dataStr) {
+        // Skip writing because it is unchanged in cache!
+        return;
+      }
 
       try {
-        await setDoc(ref, sanitize(data));
+        await setDoc(ref, sanitized);
+        syncCache[ref.path] = dataStr;
       } catch (e) {
         console.error(`[pushToFirestore] Failed to set ref: ${ref.path}`, e);
       }
@@ -369,7 +399,15 @@ export async function pushToFirestore(dbData: any): Promise<void> {
         updatedAt: b.updatedAt || b.createdAt || new Date().toISOString()
       };
       
+      const bookStr = JSON.stringify(sanitize(bookDocData));
+      const isBookUnchanged = syncCache[bookRef.path] === bookStr;
+
       await safeSet(bookRef, bookDocData);
+
+      if (isBookUnchanged) {
+        // Skip syncing chapters, audiobook, and reviews since book is unchanged!
+        continue;
+      }
 
       // Subcollection: chapters
       if (Array.isArray(b.pdfContent)) {

@@ -599,7 +599,7 @@ export async function registerDeviceToken(userId: string, token: string): Promis
   return data.success;
 }
 
-export async function updateNotificationPreferences(userId: string, data: { notifyInApp?: any; notifyPushPrefs?: any }): Promise<boolean> {
+export async function updateNotificationPreferences(userId: string, data: { notifyInApp?: any; notifyPushPrefs?: any; readingReminderEnabled?: boolean; readingReminderTime?: string }): Promise<boolean> {
   const res = await fetch(`${BASE_URL}/api/notifications/preferences`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

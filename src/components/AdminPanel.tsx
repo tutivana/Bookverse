@@ -3258,24 +3258,47 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
               role: currentAdmin.role || "Super Administrador",
               email: currentAdmin.email || "admin@bookverse.com"
             }}
-            onSave={async (updatedBookData) => {
-              setLoading(true);
+            onSave={async (updatedBookData, options) => {
+              if (!options?.silent) {
+                setLoading(true);
+              }
               try {
+                let savedBook;
                 if (isEditing) {
-                  await adminUpdateBook(isEditing, updatedBookData);
-                  triggerSuccess(`Livro "${updatedBookData.title}" atualizado com sucesso!`);
+                  savedBook = await adminUpdateBook(isEditing, updatedBookData);
+                  if (!options?.silent) {
+                    triggerSuccess(`Livro "${updatedBookData.title}" atualizado com sucesso!`);
+                  }
                 } else {
-                  await adminCreateBook(updatedBookData);
-                  triggerSuccess(`Livro "${updatedBookData.title}" adicionado com sucesso como Rascunho!`);
+                  savedBook = await adminCreateBook(updatedBookData);
+                  if (!options?.silent) {
+                    triggerSuccess(`Livro "${updatedBookData.title}" adicionado com sucesso como Rascunho!`);
+                  }
                 }
-                setIsAdding(false);
-                setIsEditing(null);
-                resetForm();
+                
                 onRefreshBooks();
+                
+                if (options?.keepOpen) {
+                  if (savedBook && savedBook.id) {
+                    setIsEditing(savedBook.id);
+                    setIsAdding(false);
+                  }
+                } else if (!options?.silent) {
+                  setIsAdding(false);
+                  setIsEditing(null);
+                  resetForm();
+                }
+                return savedBook;
               } catch (err: any) {
-                setError(err.message || "Erro ao salvar as modificações do livro.");
+                const errMsg = err.message || "Erro ao salvar as modificações do livro.";
+                if (!options?.silent) {
+                  setError(errMsg);
+                }
+                throw new Error(errMsg);
               } finally {
-                setLoading(false);
+                if (!options?.silent) {
+                  setLoading(false);
+                }
               }
             }}
           />
