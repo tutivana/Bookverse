@@ -8,7 +8,12 @@ import {
   getDocs, 
   deleteDoc, 
   collectionGroup,
-  setLogLevel
+  setLogLevel,
+  query,
+  orderBy,
+  limit as firestoreLimit,
+  startAfter as firestoreStartAfter,
+  where as firestoreWhere
 } from "firebase/firestore";
 import fs from "fs";
 import path from "path";
@@ -614,5 +619,76 @@ export async function pushToFirestore(dbData: any): Promise<void> {
     console.log("[pushToFirestore] Cloud Firestore synchronized successfully under the new collection architecture!");
   } catch (err) {
     console.error("[pushToFirestore Error] Failed to write to Firestore under the new collection architecture:", err);
+  }
+}
+
+export async function fetchBooksFromFirestorePaginated(
+  pageSize: number = 20, 
+  startAfterId?: string, 
+  category?: string, 
+  search?: string
+): Promise<{ books: any[]; lastVisibleId: string | null; hasMore: boolean }> {
+  if (!firestoreDb) {
+    throw new Error("Firestore not initialized");
+  }
+
+  try {
+    let q = query(collection(firestoreDb, "books"), orderBy("id"));
+    
+    if (category && category !== "Todas") {
+      q = query(q, firestoreWhere("category", "==", category));
+    }
+
+    if (startAfterId) {
+      const startDocRef = doc(firestoreDb, "books", startAfterId);
+      const startDocSnap = await withTimeout(getDoc(startDocRef));
+      if (startDocSnap.exists()) {
+        q = query(q, firestoreStartAfter(startDocSnap));
+      }
+    }
+
+    // Fetch pageSize + 1 to check if there is more
+    q = query(q, firestoreLimit(pageSize + 1));
+
+    const querySnap = await withTimeout(getDocs(q));
+    
+    let docs = querySnap.docs.map(docSnap => {
+      const data = docSnap.data();
+      if (data.publishedAt && !data.publishDate) {
+        data.publishDate = data.publishedAt;
+      }
+      if (data.premium !== undefined && data.accessType === undefined) {
+        data.accessType = data.premium ? "premium" : "free";
+      }
+      return data;
+    });
+
+    // In-memory filter for search if present
+    if (search) {
+      const qStr = search.toLowerCase();
+      docs = docs.filter(
+        (b: any) =>
+          b.title?.toLowerCase().includes(qStr) ||
+          b.author?.toLowerCase().includes(qStr) ||
+          b.description?.toLowerCase().includes(qStr)
+      );
+    }
+
+    const hasMore = docs.length > pageSize;
+    if (hasMore) {
+      docs = docs.slice(0, pageSize);
+    }
+
+    const lastDoc = docs[docs.length - 1];
+    const lastVisibleId = lastDoc ? lastDoc.id : null;
+
+    return {
+      books: docs,
+      lastVisibleId,
+      hasMore
+    };
+  } catch (err) {
+    console.error("Error in fetchBooksFromFirestorePaginated:", err);
+    throw err;
   }
 }

@@ -10,7 +10,11 @@ export async function fetchBooks(search?: string, category?: string): Promise<Bo
   try {
     const res = await fetch(`${BASE_URL}/api/books?${params.toString()}`);
     if (!res.ok) throw new Error("Erro ao carregar livros");
-    return await res.json();
+    const data = await res.json();
+    if (data && typeof data === "object" && Array.isArray(data.books)) {
+      return data.books;
+    }
+    return data;
   } catch (err) {
     console.warn("fetchBooks falhou, tentando IndexedDB local:", err);
     try {

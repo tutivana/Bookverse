@@ -4,7 +4,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { INITIAL_BOOKS } from "./src/initialBooks";
-import { pullFromFirestore, pushToFirestore } from "./src/db/serverFirebase";
+import { pullFromFirestore, pushToFirestore, fetchBooksFromFirestorePaginated } from "./src/db/serverFirebase";
 import {
   User,
   Book,
@@ -1779,26 +1779,57 @@ app.get("/api/admin/subscription-stats", (req, res) => {
 });
 
 // Books API
-app.get("/api/books", (req, res) => {
+app.get("/api/books", async (req, res) => {
   const db = readDb();
-  const { search, category } = req.query;
-  let result = [...db.books];
+  const limitParam = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+  const startAfterId = req.query.startAfterId ? String(req.query.startAfterId) : undefined;
+  const category = req.query.category ? String(req.query.category) : undefined;
+  const search = req.query.search ? String(req.query.search) : undefined;
 
-  if (search) {
-    const q = String(search).toLowerCase();
-    result = result.filter(
-      (b) =>
-        b.title.toLowerCase().includes(q) ||
-        b.author.toLowerCase().includes(q) ||
-        b.description.toLowerCase().includes(q)
-    );
+  try {
+    const result = await fetchBooksFromFirestorePaginated(limitParam, startAfterId, category, search);
+    res.json(result);
+  } catch (err) {
+    console.warn("Firestore paginated fetch failed, falling back to local database:", err);
+    
+    let resultBooks = [...db.books];
+
+    if (search) {
+      const q = search.toLowerCase();
+      resultBooks = resultBooks.filter(
+        (b) =>
+          b.title.toLowerCase().includes(q) ||
+          b.author.toLowerCase().includes(q) ||
+          b.description.toLowerCase().includes(q)
+      );
+    }
+
+    if (category && category !== "Todas") {
+      resultBooks = resultBooks.filter((b) => b.category === category);
+    }
+
+    // Sort by id for consistency
+    resultBooks.sort((a, b) => a.id.localeCompare(b.id));
+
+    let startIndex = 0;
+    if (startAfterId) {
+      const idx = resultBooks.findIndex((b) => b.id === startAfterId);
+      if (idx !== -1) {
+        startIndex = idx + 1;
+      }
+    }
+
+    const paginatedBooks = resultBooks.slice(startIndex, startIndex + limitParam);
+    const hasMore = startIndex + limitParam < resultBooks.length;
+    const lastDoc = paginatedBooks[paginatedBooks.length - 1];
+    const lastVisibleId = lastDoc ? lastDoc.id : null;
+
+    res.json({
+      books: paginatedBooks,
+      lastVisibleId,
+      hasMore
+    });
   }
-
-  if (category && category !== "Todas") {
-    result = result.filter((b) => b.category === category);
-  }
-
-  res.json(result);
 });
 
 app.get("/api/books/:id", (req, res) => {
