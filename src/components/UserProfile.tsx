@@ -68,6 +68,72 @@ import ContactSupportModal from "./ContactSupportModal";
 
 type ProfileTab = "profile" | "settings" | "security" | "privacy" | "notifications" | "offline" | "billing";
 
+const getDeviceLanguage = (): string => {
+  if (typeof navigator !== "undefined" && navigator.language) {
+    const lang = navigator.language;
+    const supported = [
+      "pt-BR", "pt-PT",
+      "en-US", "en-GB",
+      "es-ES", "es-419",
+      "fr-FR", "it-IT",
+      "de-DE", "ja-JP", "zh-CN"
+    ];
+    if (supported.includes(lang)) return lang;
+    const prefix = lang.split("-")[0];
+    if (prefix === "pt") return "pt-BR";
+    if (prefix === "en") return "en-US";
+    if (prefix === "es") return "es-ES";
+    if (prefix === "fr") return "fr-FR";
+    if (prefix === "it") return "it-IT";
+    if (prefix === "de") return "de-DE";
+    if (prefix === "ja") return "ja-JP";
+    if (prefix === "zh") return "zh-CN";
+    return "pt-BR";
+  }
+  return "pt-BR";
+};
+
+const compressAvatarImage = (base64Str: string, maxWidth = 150, maxHeight = 150, quality = 0.75): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let width = img.width;
+      let height = img.height;
+
+      // Calculate new dimensions preserving aspect ratio
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(base64Str);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      const compressed = canvas.toDataURL("image/jpeg", quality);
+      resolve(compressed);
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+  });
+};
+
 const getInitialsAvatarSvg = (name: string): string => {
   const firstLetter = (name ? name.trim().charAt(0) : "U").toUpperCase();
   const colors = ["#e2b874", "#d97706", "#2563eb", "#059669", "#dc2626", "#7c3aed"];
@@ -156,7 +222,7 @@ export default function UserProfile({
   );
 
   // Preference states
-  const [language, setLanguage] = useState(user.preferences?.language || "pt-BR");
+  const [language, setLanguage] = useState(user.preferences?.language || getDeviceLanguage());
   const [theme, setTheme] = useState(user.preferences?.theme || "escuro");
   const [fontSize, setFontSize] = useState(user.preferences?.fontSize || "medium");
   const [layoutMode, setLayoutMode] = useState(user.preferences?.layoutMode || "paged");
@@ -181,6 +247,24 @@ export default function UserProfile({
   const [deleteEmailConfirm, setDeleteEmailConfirm] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isSupportOpen, setIsSupportOpen] = useState(false);
+
+  // Sync fields when user prop updates
+  useEffect(() => {
+    setName(user.name);
+    setUsername(user.username || "");
+    setBio(user.bio || "");
+    setEmail(user.email);
+    setAvatarUrl(user.avatarUrl || "");
+    setLanguage(user.preferences?.language || getDeviceLanguage());
+    setTheme(user.preferences?.theme || "escuro");
+    setFontSize(user.preferences?.fontSize || "medium");
+    setLayoutMode(user.preferences?.layoutMode || "paged");
+    setNotifyPush(user.preferences?.notifyPush !== false);
+    setNotifyEmail(user.preferences?.notifyEmail !== false);
+    setAudioSpeed(user.preferences?.audioSpeed || "1.0");
+    setAccountPrivate(user.privacy?.accountPrivate || false);
+    setShowStats(user.privacy?.showStats !== false);
+  }, [user]);
 
   // Loading Reviews and Notes on mount
   useEffect(() => {
@@ -874,9 +958,10 @@ export default function UserProfile({
                               const file = e.target.files?.[0];
                               if (file) {
                                 const reader = new FileReader();
-                                reader.onloadend = () => {
+                                reader.onloadend = async () => {
                                   if (typeof reader.result === "string") {
-                                    setAvatarUrl(reader.result);
+                                    const compressed = await compressAvatarImage(reader.result);
+                                    setAvatarUrl(compressed);
                                   }
                                 };
                                 reader.readAsDataURL(file);
@@ -1057,12 +1142,23 @@ export default function UserProfile({
                             setLanguage(e.target.value);
                             handlePreferenceChange("language", e.target.value);
                           }}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 px-3 text-zinc-200 font-bold"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 px-3 text-zinc-200 font-bold text-xs"
                         >
                           <option value="pt-BR">Português (Brasil)</option>
-                          <option value="en">English (US)</option>
-                          <option value="es">Español</option>
+                          <option value="pt-PT">Português (Portugal)</option>
+                          <option value="en-US">English (US)</option>
+                          <option value="en-GB">English (UK)</option>
+                          <option value="es-ES">Español (España)</option>
+                          <option value="es-419">Español (América Latina)</option>
+                          <option value="fr-FR">Français (France)</option>
+                          <option value="it-IT">Italiano (Italia)</option>
+                          <option value="de-DE">Deutsch (Deutschland)</option>
+                          <option value="ja-JP">日本語 (日本)</option>
+                          <option value="zh-CN">简体中文 (中国)</option>
                         </select>
+                        <p className="text-[9px] text-zinc-500 leading-tight">
+                          * Por padrão, é selecionado o idioma de uso do seu navegador/dispositivo.
+                        </p>
                       </div>
 
                       <div className="space-y-1">

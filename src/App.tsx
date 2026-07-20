@@ -912,7 +912,10 @@ export default function App() {
                 books={books}
                 favorites={favorites}
                 notificationsCount={notifications.filter((n) => !n.read).length}
-                onUpdateUser={(updatedUser) => setUser(updatedUser)}
+                onUpdateUser={(updatedUser) => {
+                  setUser(updatedUser);
+                  localStorage.setItem("bookverse_user", JSON.stringify(updatedUser));
+                }}
                 onLogout={handleLogout}
                 onViewChange={(view) => setCurrentView(view)}
                 onSelectBook={handleSelectBook}

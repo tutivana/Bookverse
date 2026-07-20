@@ -59,6 +59,7 @@ export default function Library({
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedLanguage, setSelectedLanguage] = useState("Todos");
+  const [showAllInProgress, setShowAllInProgress] = useState(false);
 
   // Hybrid states
   type LibraryState = "ONLINE_LOADING" | "ONLINE_SYNCING" | "OFFLINE_MODE" | "EMPTY_OFFLINE";
@@ -451,12 +452,22 @@ export default function Library({
       {/* Grid containing In Progress (Continue Lendo) shelf */}
       {inProgressList.length > 0 && (
         <div className="mb-10">
-          <h2 className="text-xl font-serif font-bold text-zinc-100 mb-4 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-[#e2b874]" />
-            Continuar Lendo
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-serif font-bold text-zinc-100 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-[#e2b874]" />
+              Continuar Lendo
+            </h2>
+            {inProgressList.length > 3 && (
+              <button
+                onClick={() => setShowAllInProgress(!showAllInProgress)}
+                className="text-xs text-[#e2b874] hover:text-[#c59e5f] font-bold flex items-center gap-1 bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-850 px-3 py-1.5 rounded-xl transition cursor-pointer"
+              >
+                {showAllInProgress ? "Ver menos" : `Ver mais (${inProgressList.length - 3})`}
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {inProgressList.map(({ book, progress }) => {
+            {(showAllInProgress ? inProgressList : inProgressList.slice(0, 3)).map(({ book, progress }) => {
               if (!book) return null;
               return (
                 <motion.div
@@ -553,13 +564,7 @@ export default function Library({
                               <Headphones className="w-3.5 h-3.5 text-[#e2b874]" />
                             </button>
                           )}
-                          <OfflineDownloadButton
-                            book={book}
-                            isPremium={premium}
-                            onTriggerPaywall={() => onTriggerPaywall("offline")}
-                            iconOnly={true}
-                            className="w-9 h-9 flex-shrink-0"
-                          />
+
                         </>
                       )}
                     </div>

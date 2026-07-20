@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import sharp from "sharp";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { INITIAL_BOOKS } from "./src/initialBooks";
@@ -1089,6 +1090,174 @@ app.post("/api/auth/reset-password", (req, res) => {
   });
 
   res.json({ success: true, message: "Sua senha foi atualizada com sucesso!" });
+});
+
+// ============================================================================
+// PWA DYNAMIC ASSETS (LOGOS AND SCREENSHOTS FOR PWABUILDER & CHROME)
+// ============================================================================
+app.get("/bookverse_logo_:size.png", async (req, res) => {
+  const sizeStr = req.params.size;
+  const size = parseInt(sizeStr, 10);
+  if (isNaN(size) || size < 16 || size > 1024) {
+    res.status(400).send("Invalid size");
+    return;
+  }
+  try {
+    const svgPath = path.join(process.cwd(), "public", "bookverse_logo.svg");
+    const pngBuffer = await sharp(svgPath)
+      .resize(size, size)
+      .png()
+      .toBuffer();
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(pngBuffer);
+  } catch (error) {
+    console.error("Error generating logo PNG:", error);
+    res.status(500).send("Error generating icon");
+  }
+});
+
+app.get("/screenshot-desktop.png", async (req, res) => {
+  try {
+    const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <rect width="1280" height="720" fill="#121214" />
+  <rect x="0" y="0" width="240" height="720" fill="#18181b" />
+  <line x1="240" y1="0" x2="240" y2="720" stroke="#27272a" stroke-width="1" />
+  <g transform="translate(24, 40)">
+    <rect width="40" height="40" rx="8" fill="#e2b874" />
+    <path d="M 12 15 L 20 25 L 28 15" stroke="#121214" stroke-width="3" stroke-linecap="round" fill="none" />
+    <text x="56" y="26" font-family="sans-serif" font-weight="800" font-size="20" fill="#e2b874" letter-spacing="1">BookVerse</text>
+  </g>
+  <g transform="translate(24, 120)" font-family="sans-serif" font-size="14" font-weight="600" fill="#a1a1aa">
+    <g transform="translate(0, 0)">
+      <rect x="-12" y="-10" width="204" height="40" rx="10" fill="#27272a" opacity="0.4" />
+      <text x="12" y="15" fill="#e2b874">Biblioteca</text>
+    </g>
+    <text x="12" y="65">Favoritos</text>
+    <text x="12" y="115">Estatísticas</text>
+    <text x="12" y="165">Notificações</text>
+    <text x="12" y="215">Configurações</text>
+  </g>
+  <g transform="translate(280, 40)">
+    <text x="0" y="30" font-family="serif" font-weight="bold" font-size="28" fill="#ffffff">Sua Biblioteca Digital</text>
+    <text x="0" y="55" font-family="sans-serif" font-size="13" fill="#71717a">Continue lendo de onde parou ou explore o catálogo</text>
+    <g transform="translate(840, 5)">
+      <rect width="120" height="32" rx="16" fill="#e2b874" opacity="0.1" />
+      <rect width="120" height="32" rx="16" stroke="#e2b874" stroke-width="1.5" fill="none" />
+      <text x="60" y="20" font-family="sans-serif" font-size="12" font-weight="700" fill="#e2b874" text-anchor="middle">PREMIUM</text>
+    </g>
+    <text x="0" y="110" font-family="serif" font-weight="bold" font-size="18" fill="#e2b874">Continuar Lendo</text>
+    <g transform="translate(0, 130)">
+      <rect width="450" height="150" rx="20" fill="#1e1e20" stroke="#27272a" stroke-width="1" />
+      <rect x="20" y="20" width="75" height="110" rx="8" fill="#2d2d30" />
+      <text x="57" y="80" font-family="serif" font-weight="bold" font-size="24" fill="#e2b874" text-anchor="middle">DC</text>
+      <text x="115" y="45" font-family="serif" font-weight="bold" font-size="16" fill="#ffffff">Dom Casmurro</text>
+      <text x="115" y="65" font-family="sans-serif" font-size="12" fill="#a1a1aa">Machado de Assis</text>
+      <text x="115" y="100" font-family="sans-serif" font-size="11" fill="#71717a">Progresso: 45%</text>
+      <rect x="115" y="112" width="310" height="6" rx="3" fill="#27272a" />
+      <rect x="115" y="112" width="139" height="6" rx="3" fill="#e2b874" />
+    </g>
+    <text x="0" y="325" font-family="serif" font-weight="bold" font-size="18" fill="#e2b874">Destaques do Catálogo</text>
+    <g transform="translate(0, 350)">
+      <g transform="translate(0, 0)">
+        <rect width="210" height="280" rx="20" fill="#1e1e20" stroke="#27272a" stroke-width="1" />
+        <rect x="20" y="20" width="170" height="150" rx="12" fill="#2d2d30" />
+        <text x="105" y="105" font-family="serif" font-weight="bold" font-size="32" fill="#e2b874" text-anchor="middle">GQ</text>
+        <text x="20" y="200" font-family="serif" font-weight="bold" font-size="14" fill="#ffffff">Don Quixote</text>
+        <text x="20" y="218" font-family="sans-serif" font-size="11" fill="#a1a1aa">Miguel de Cervantes</text>
+        <text x="20" y="245" font-family="sans-serif" font-size="11" fill="#e2b874">4.9 (128 avaliacoes)</text>
+      </g>
+      <g transform="translate(230, 0)">
+        <rect width="210" height="280" rx="20" fill="#1e1e20" stroke="#27272a" stroke-width="1" />
+        <rect x="20" y="20" width="170" height="150" rx="12" fill="#2d2d30" />
+        <text x="105" y="105" font-family="serif" font-weight="bold" font-size="32" fill="#e2b874" text-anchor="middle">HD</text>
+        <text x="20" y="200" font-family="serif" font-weight="bold" font-size="14" fill="#ffffff">O Cortico</text>
+        <text x="20" y="218" font-family="sans-serif" font-size="11" fill="#a1a1aa">Aluisio Azevedo</text>
+        <text x="20" y="245" font-family="sans-serif" font-size="11" fill="#e2b874">4.7 (94 avaliacoes)</text>
+      </g>
+      <g transform="translate(460, 0)">
+        <rect width="210" height="280" rx="20" fill="#1e1e20" stroke="#27272a" stroke-width="1" />
+        <rect x="20" y="20" width="170" height="150" rx="12" fill="#2d2d30" />
+        <text x="105" y="105" font-family="serif" font-weight="bold" font-size="32" fill="#e2b874" text-anchor="middle">MS</text>
+        <text x="20" y="200" font-family="serif" font-weight="bold" font-size="14" fill="#ffffff">Memorias Postumas</text>
+        <text x="20" y="218" font-family="sans-serif" font-size="11" fill="#a1a1aa">Machado de Assis</text>
+        <text x="20" y="245" font-family="sans-serif" font-size="11" fill="#e2b874">4.8 (210 avaliacoes)</text>
+      </g>
+    </g>
+  </g>
+</svg>
+`;
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .png()
+      .toBuffer();
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(pngBuffer);
+  } catch (error) {
+    console.error("Error generating desktop screenshot:", error);
+    res.status(500).send("Error generating screenshot");
+  }
+});
+
+app.get("/screenshot-mobile.png", async (req, res) => {
+  try {
+    const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1280" width="720" height="1280">
+  <rect width="720" height="1280" fill="#121214" />
+  <g transform="translate(40, 60)">
+    <rect width="48" height="48" rx="12" fill="#e2b874" />
+    <path d="M 18 20 L 24 28 L 30 20" stroke="#121214" stroke-width="3" stroke-linecap="round" fill="none" />
+    <text x="68" y="32" font-family="sans-serif" font-weight="800" font-size="24" fill="#e2b874" letter-spacing="1">BookVerse</text>
+    <g transform="translate(520, 8)">
+      <rect width="100" height="32" rx="16" fill="#e2b874" opacity="0.15" />
+      <text x="50" y="20" font-family="sans-serif" font-size="11" font-weight="800" fill="#e2b874" text-anchor="middle">VIP</text>
+    </g>
+  </g>
+  <g transform="translate(40, 150)">
+    <text x="0" y="40" font-family="serif" font-weight="bold" font-size="22" fill="#e2b874">Continuar Lendo</text>
+    <g transform="translate(0, 60)">
+      <rect width="640" height="180" rx="24" fill="#1e1e20" stroke="#27272a" stroke-width="1.5" />
+      <rect x="24" y="24" width="90" height="132" rx="12" fill="#2d2d30" />
+      <text x="69" y="96" font-family="serif" font-weight="bold" font-size="28" fill="#e2b874" text-anchor="middle">DC</text>
+      <text x="138" y="54" font-family="serif" font-weight="bold" font-size="18" fill="#ffffff">Dom Casmurro</text>
+      <text x="138" y="78" font-family="sans-serif" font-size="13" fill="#a1a1aa">Machado de Assis</text>
+      <text x="138" y="115" font-family="sans-serif" font-size="12" fill="#71717a">Progresso: 45%</text>
+      <rect x="138" y="130" width="478" height="8" rx="4" fill="#27272a" />
+      <rect x="138" y="130" width="215" height="8" rx="4" fill="#e2b874" />
+    </g>
+    <text x="0" y="300" font-family="serif" font-weight="bold" font-size="22" fill="#e2b874">Catálogo Recomendado</text>
+    <g transform="translate(0, 330)">
+      <g transform="translate(0, 0)">
+        <rect width="300" height="420" rx="24" fill="#1e1e20" stroke="#27272a" stroke-width="1.5" />
+        <rect x="24" y="24" width="252" height="230" rx="16" fill="#2d2d30" />
+        <text x="150" y="150" font-family="serif" font-weight="bold" font-size="44" fill="#e2b874" text-anchor="middle">MS</text>
+        <text x="24" y="290" font-family="serif" font-weight="bold" font-size="16" fill="#ffffff">Memórias Póstumas</text>
+        <text x="24" y="315" font-family="sans-serif" font-size="12" fill="#a1a1aa">Machado de Assis</text>
+        <text x="24" y="350" font-family="sans-serif" font-size="12" fill="#e2b874">4.9 (210 avaliações)</text>
+      </g>
+      <g transform="translate(340, 0)">
+        <rect width="300" height="420" rx="24" fill="#1e1e20" stroke="#27272a" stroke-width="1.5" />
+        <rect x="24" y="24" width="252" height="230" rx="16" fill="#2d2d30" />
+        <text x="150" y="150" font-family="serif" font-weight="bold" font-size="44" fill="#e2b874" text-anchor="middle">GQ</text>
+        <text x="24" y="290" font-family="serif" font-weight="bold" font-size="16" fill="#ffffff">Don Quixote</text>
+        <text x="24" y="315" font-family="sans-serif" font-size="12" fill="#a1a1aa">Miguel de Cervantes</text>
+        <text x="24" y="350" font-family="sans-serif" font-size="12" fill="#e2b874">4.8 (128 avaliações)</text>
+      </g>
+    </g>
+  </g>
+</svg>
+`;
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .png()
+      .toBuffer();
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(pngBuffer);
+  } catch (error) {
+    console.error("Error generating mobile screenshot:", error);
+    res.status(500).send("Error generating screenshot");
+  }
 });
 
 app.get("/api/auth/me/:userId", (req, res) => {

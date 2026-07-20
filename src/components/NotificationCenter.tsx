@@ -46,10 +46,12 @@ export default function NotificationCenter({
   const [error, setError] = useState<string | null>(null);
   const [visibleLimit, setVisibleLimit] = useState(5);
 
-  const loadNotifications = async () => {
+  const loadNotifications = async (isSilent = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!isSilent) {
+        setLoading(true);
+        setError(null);
+      }
       const data = await fetchNotifications(userId);
       // Sort cronologically desc
       const sorted = [...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -57,6 +59,9 @@ export default function NotificationCenter({
       
       const unreadCount = sorted.filter(n => !n.read).length;
       if (onUpdateCount) onUpdateCount(unreadCount);
+      if (!isSilent) {
+        setError(null);
+      }
     } catch (err: any) {
       const isNetworkErr = err && (
         err.name === "TypeError" || 
@@ -66,20 +71,22 @@ export default function NotificationCenter({
       );
       if (isNetworkErr) {
         console.warn("Transient network connection warning when fetching notifications in NotificationCenter:", err.message || err);
-      } else {
+      } else if (!isSilent) {
         setError("Erro ao carregar notificações.");
         console.error(err);
       }
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     if (userId) {
-      loadNotifications();
-      // Auto-refresh every 10 seconds to simulate real-time notification push!
-      const interval = setInterval(loadNotifications, 10000);
+      loadNotifications(false);
+      // Auto-refresh every 10 seconds silently to simulate real-time notification push!
+      const interval = setInterval(() => loadNotifications(true), 10000);
       return () => clearInterval(interval);
     }
   }, [userId]);
@@ -209,7 +216,7 @@ export default function NotificationCenter({
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={loadNotifications}
+                  onClick={() => loadNotifications(false)}
                   disabled={loading}
                   className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
                   title="Atualizar"

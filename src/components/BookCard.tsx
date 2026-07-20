@@ -2,7 +2,6 @@ import React from "react";
 import { motion } from "motion/react";
 import { Sparkles, Heart, Headphones, BookOpen } from "lucide-react";
 import { Book, ReadingProgress, User } from "../types";
-import OfflineDownloadButton from "./OfflineDownloadButton";
 
 interface BookCardProps {
   book: Book;
@@ -145,19 +144,13 @@ export default function BookCard({
             {book.audiobookAvailable && (
               <button
                 onClick={() => handleBookClick(book, true)}
-                className="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-100 rounded-xl flex items-center justify-center transition active:scale-[0.97] cursor-pointer flex-shrink-0"
+                className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-100 text-[10px] sm:text-xs font-bold h-10 rounded-xl flex items-center justify-center gap-1 transition active:scale-[0.97] cursor-pointer"
                 title="Ouvir Audiobook"
               >
                 <Headphones className="w-4 h-4 text-[#e2b874]" />
+                <span className="hidden sm:inline">Ouvir</span>
               </button>
             )}
-            <OfflineDownloadButton
-              book={book}
-              isPremium={premium}
-              onTriggerPaywall={() => onTriggerPaywall("offline")}
-              iconOnly={true}
-              className="w-10 h-10 flex-shrink-0"
-            />
           </div>
         </div>
       </div>
