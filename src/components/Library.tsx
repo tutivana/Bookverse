@@ -222,9 +222,9 @@ export default function Library({
     ? fetchedBooks.filter((book) => selectedLanguage === "Todos" || book.language === selectedLanguage)
     : downloadedBooks.filter((book) => {
         const matchesSearch = !searchTerm || 
-          book.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-          book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (book.category && book.category.toLowerCase().includes(searchTerm.toLowerCase()));
+          (book.title || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+          (book.author || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (book.category || "").toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = selectedCategory === "Todas" || book.category === selectedCategory;
         const matchesLanguage = selectedLanguage === "Todos" || book.language === selectedLanguage;
         return matchesSearch && matchesCategory && matchesLanguage;
@@ -391,33 +391,47 @@ export default function Library({
         <div>
           <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1.5">Filtrar por Categoria</span>
           <div className="overflow-x-auto whitespace-nowrap scrollbar-none py-1 flex gap-2">
-            {categories.map((cat) => {
-              const count = getCategoryCount(cat);
-              return (
-                <button
-                  key={cat}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition flex items-center gap-2 ${
-                    selectedCategory === cat
-                      ? "bg-[#e2b874] text-zinc-950 border-[#e2b874] font-bold shadow-md shadow-[#e2b874]/10"
-                      : "bg-[#121214] text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100"
-                  }`}
-                  onClick={() => setSelectedCategory(cat)}
-                >
-                  <span>{cat}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-sans font-medium ${
-                    selectedCategory === cat
-                      ? "bg-zinc-950/20 text-zinc-950"
-                      : "bg-zinc-900 text-zinc-500"
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+            {loadingInitial ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-8 w-24 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse shrink-0" />
+              ))
+            ) : (
+              categories.map((cat) => {
+                const count = getCategoryCount(cat);
+                return (
+                  <button
+                    key={cat}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-medium tracking-wide border cursor-pointer transition flex items-center gap-2 ${
+                      selectedCategory === cat
+                        ? "bg-[#e2b874] text-zinc-950 border-[#e2b874] font-bold shadow-md shadow-[#e2b874]/10"
+                        : "bg-[#121214] text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100"
+                    }`}
+                    onClick={() => setSelectedCategory(cat)}
+                  >
+                    <span>{cat}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-sans font-medium ${
+                      selectedCategory === cat
+                        ? "bg-zinc-950/20 text-zinc-950"
+                        : "bg-zinc-900 text-zinc-500"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {languages.length > 1 && (
+        {loadingInitial ? (
+          <div>
+            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1.5">Filtrar por Idioma</span>
+            <div className="flex gap-2">
+              <div className="h-8 w-20 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
+              <div className="h-8 w-20 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
+            </div>
+          </div>
+        ) : languages.length > 1 && (
           <div>
             <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block mb-1.5">Filtrar por Idioma</span>
             <div className="overflow-x-auto whitespace-nowrap scrollbar-none py-1 flex gap-2">
@@ -450,7 +464,29 @@ export default function Library({
       </div>
 
       {/* Grid containing In Progress (Continue Lendo) shelf */}
-      {inProgressList.length > 0 && (
+      {loadingInitial ? (
+        <div className="mb-10">
+          <div className="h-6 w-40 bg-zinc-900 rounded-lg animate-pulse mb-4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-4 h-32 animate-pulse flex gap-4">
+              <div className="w-20 h-28 bg-zinc-800 rounded-xl" />
+              <div className="flex-1 space-y-3 py-1">
+                <div className="h-4 bg-zinc-800 rounded w-3/4" />
+                <div className="h-3 bg-zinc-800 rounded w-1/2" />
+                <div className="h-2 bg-zinc-800 rounded w-full mt-4" />
+              </div>
+            </div>
+            <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-4 h-32 animate-pulse flex gap-4 hidden md:flex">
+              <div className="w-20 h-28 bg-zinc-800 rounded-xl" />
+              <div className="flex-1 space-y-3 py-1">
+                <div className="h-4 bg-zinc-800 rounded w-3/4" />
+                <div className="h-3 bg-zinc-800 rounded w-1/2" />
+                <div className="h-2 bg-zinc-800 rounded w-full mt-4" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : inProgressList.length > 0 && (
         <div className="mb-10">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-serif font-bold text-zinc-100 flex items-center gap-2">
@@ -650,8 +686,50 @@ export default function Library({
 
         {/* Right 1 column: User Stats & Personalized recommendations sidebar */}
         <div className="space-y-6">
-          {/* Quick Stats Bento card */}
-          {!user ? (
+          {loadingInitial ? (
+            <>
+              {/* Skeleton for Seu Desempenho */}
+              <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-5 shadow-md space-y-4 animate-pulse">
+                <div className="h-4 bg-zinc-800 rounded w-1/2" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="h-16 bg-zinc-800 rounded-xl" />
+                  <div className="h-16 bg-zinc-800 rounded-xl" />
+                </div>
+                <div className="h-8 bg-zinc-800 rounded-xl w-full" />
+              </div>
+
+              {/* Skeleton for Seus Favoritos */}
+              <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-5 shadow-md space-y-3 animate-pulse">
+                <div className="h-4 bg-zinc-800 rounded w-1/2" />
+                <div className="space-y-2">
+                  <div className="flex gap-2 items-center">
+                    <div className="w-9 h-12 bg-zinc-800 rounded" />
+                    <div className="flex-1 space-y-1">
+                      <div className="h-3 bg-zinc-800 rounded w-3/4" />
+                      <div className="h-2 bg-zinc-800 rounded w-1/2" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <div className="w-9 h-12 bg-zinc-800 rounded" />
+                    <div className="flex-1 space-y-1">
+                      <div className="h-3 bg-zinc-800 rounded w-2/3" />
+                      <div className="h-2 bg-zinc-800 rounded w-1/3" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Skeleton for Dica da IA */}
+              <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-5 shadow-md space-y-3 animate-pulse">
+                <div className="h-4 bg-zinc-800 rounded w-2/5" />
+                <div className="h-12 bg-zinc-800 rounded w-full" />
+                <div className="h-3 bg-zinc-800 rounded w-1/2" />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Quick Stats Bento card */}
+              {!user ? (
             <div className="bg-gradient-to-br from-[#121214] to-[#0c0c0e] border border-zinc-800 p-5 rounded-2xl shadow-lg relative overflow-hidden text-center space-y-4">
               <div className="absolute top-0 right-0 w-24 h-24 bg-[#e2b874]/5 rounded-full blur-xl pointer-events-none"></div>
               
@@ -786,6 +864,8 @@ export default function Library({
               Gerado automaticamente baseado na sua preferência.
             </div>
           </div>
+          </>
+        )}
         </div>
       </div>
 

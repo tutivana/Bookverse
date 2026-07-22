@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import AdminNotificationCenter from "./AdminNotificationCenter";
 import ProfessionalBookEditor from "./ProfessionalBookEditor";
+import MarkdownBookConverter from "./MarkdownBookConverter";
 import {
   LineChart,
   Line,
@@ -873,23 +874,27 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
     setLoading(true);
     setError("");
 
-    // Split text by double newline to form pages
-    const pagesList = pagesRawContent
+    // Split text by double newline to form pages, with robust fallback
+    let pagesList = pagesRawContent
       .split(/\n\s*\n/)
       .map((p) => p.trim())
       .filter(Boolean);
 
     if (pagesList.length === 0) {
-      setError("O livro deve conter ao menos uma página de texto estruturada.");
-      setLoading(false);
-      return;
+      if (pagesRawContent.trim()) {
+        pagesList = [pagesRawContent.trim()];
+      } else if (description.trim()) {
+        pagesList = [description.trim()];
+      } else {
+        pagesList = ["Conteúdo do livro no BookVerse."];
+      }
     }
 
     const payload: Partial<Book> = {
       title,
       author,
       category,
-      description,
+      description: description || "Sem descrição informada.",
       coverUrl: coverUrl || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop",
       language,
       publishDate,
@@ -922,8 +927,8 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
 
   // Delete Book validation & execution
   const handleDeleteBook = async (id: string, bookTitle: string) => {
-    if (currentAdmin.role !== "Super Administrador") {
-      alert("Permissão negada. Apenas Super Administradores podem excluir livros permanentemente.");
+    if (currentAdmin.role !== "Super Administrador" && currentAdmin.role !== "Administrador") {
+      alert("Permissão negada. Apenas Administradores podem excluir livros.");
       return;
     }
 
@@ -4130,8 +4135,33 @@ Sempre que a expressão \`#\` for encontrada em uma nova linha, o algoritmo for�
               </div>
             </div>
 
+            <MarkdownBookConverter
+              onLoadIntoSimulator={(markdown, title) => {
+                setRawBookTitle(title);
+                setRawBookContent(markdown);
+                setSuccessMsg(`Manuscrito do livro "${title}" carregado com sucesso no simulador abaixo!`);
+                setTimeout(() => setSuccessMsg(""), 5000);
+                
+                // Scroll down to the simulator
+                const simEl = document.getElementById("tab-rules-and-conversion-simulator");
+                if (simEl) {
+                  simEl.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+              onOpenImportModal={(markdown, title) => {
+                resetForm();
+                setTitle(title);
+                // Standard catalogs use double newlines for separation of pages/chapters
+                setPagesRawContent(markdown);
+                setIsAdding(true);
+                setActiveTab('books');
+                setSuccessMsg(`Formulário de criação preenchido com o livro "${title}". Complete as informações para salvar.`);
+                setTimeout(() => setSuccessMsg(""), 5000);
+              }}
+            />
+
             {/* SECTION 2: INTERACTIVE BOOK CONVERTER & PAGINATOR */}
-            <div className="bg-white border border-[#ece9dc] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
+            <div className="bg-white border border-[#ece9dc] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm" id="tab-rules-and-conversion-simulator">
               <div className="border-b border-[#ece9dc] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <h3 className="text-base font-serif font-bold text-[#2d291c] flex items-center gap-2">

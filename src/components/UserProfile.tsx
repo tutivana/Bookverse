@@ -167,6 +167,17 @@ export default function UserProfile({
   const [password, setPassword] = useState("••••••••");
   const [confirmPassword, setConfirmPassword] = useState("••••••••");
   
+  // Keep form fields synced with user prop updates
+  useEffect(() => {
+    if (user) {
+      setName(user.name || "");
+      setUsername(user.username || user.name?.toLowerCase().replace(/\s+/g, "_") || "");
+      setBio(user.bio || "");
+      setEmail(user.email || "");
+      setAvatarUrl(user.avatarUrl || "");
+    }
+  }, [user]);
+
   const [saveSuccess, setSaveSuccess] = useState("");
   const [saveError, setSaveError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -175,8 +186,8 @@ export default function UserProfile({
   const isAdmin = user.role === "Super Administrador" || user.role === "Administrador";
 
   // Real-time validation criteria
-  const isNameValid = name.trim().length >= 3;
-  const isUsernameValid = username.trim().length >= 3 && /^[a-zA-Z0-9_]+$/.test(username);
+  const isNameValid = name.trim().length >= 2;
+  const isUsernameValid = !username.trim() || username.trim().length >= 2;
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const isChangingPassword = password !== "••••••••" && password !== "";
@@ -314,11 +325,12 @@ export default function UserProfile({
     }
 
     try {
+      const formattedUsername = (username.trim() || name.trim().toLowerCase().replace(/\s+/g, "_")).replace(/[^a-zA-Z0-9_\.-]/g, "_");
       const payload: any = {
-        name,
-        username,
-        bio,
-        email,
+        name: name.trim(),
+        username: formattedUsername,
+        bio: bio.trim(),
+        email: email.trim(),
         avatarUrl,
         preferences: {
           language,

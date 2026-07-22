@@ -20,7 +20,10 @@ import {
   List,
   X,
   Eye,
-  EyeOff
+  EyeOff,
+  Sliders,
+  Maximize,
+  Minimize
 } from "lucide-react";
 import { Book, ReadingProgress, Bookmark as BookmarkType, HighlightAndNote, User } from "../types";
 import { askGeminiAssistant } from "../lib/api";
@@ -40,6 +43,7 @@ interface ReaderProps {
   progress: ReadingProgress | null;
   onTriggerPaywall: (reason: "highlights") => void;
   onUpdateUser?: (updatedUser: User) => void;
+  onFocusModeChange?: (isFocus: boolean) => void;
 }
 
 type ReaderTheme = "claro" | "sepia" | "escuro" | "auto";
@@ -80,6 +84,7 @@ export default function Reader({
   progress,
   onTriggerPaywall,
   onUpdateUser,
+  onFocusModeChange,
 }: ReaderProps) {
   const premium = isUserPremium(user);
   const { triggerInterstitialAd } = useAdManager();
@@ -88,7 +93,62 @@ export default function Reader({
     return (user?.preferences?.theme as ReaderTheme) || "escuro";
   });
   const [isFocusMode, setIsFocusMode] = useState(false);
+
+  useEffect(() => {
+    onFocusModeChange?.(isFocusMode);
+  }, [isFocusMode, onFocusModeChange]);
   const [fontSize, setFontSize] = useState(1.1); // in rem
+  const [fontFamily, setFontFamily] = useState<string>(() => {
+    return (user?.preferences as any)?.fontFamily || "'Merriweather', 'Georgia', serif";
+  });
+
+  const [showMobileFontControls, setShowMobileFontControls] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((e) => console.warn(e));
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch((e) => console.warn(e));
+      }
+    }
+  };
+
+  const [markedPositions, setMarkedPositions] = useState<{ [page: number]: number }>(() => {
+    try {
+      const saved = localStorage.getItem(`bookverse_readmark_${book.id}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const handleToggleMarkPosition = (pageIndex: number, paragraphIndex: number) => {
+    setMarkedPositions((prev) => {
+      const updated = { ...prev };
+      if (updated[pageIndex] === paragraphIndex) {
+        delete updated[pageIndex];
+      } else {
+        updated[pageIndex] = paragraphIndex;
+      }
+      try {
+        localStorage.setItem(`bookverse_readmark_${book.id}`, JSON.stringify(updated));
+      } catch (e) {
+        console.error("Error saving read mark", e);
+      }
+      return updated;
+    });
+  };
+
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [notes, setNotes] = useState<HighlightAndNote[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -640,8 +700,36 @@ export default function Reader({
     return bestIdx;
   }, -1);
 
+  // Handle text selection (mouse & mobile touch handles)
+  useEffect(() => {
+    let timeoutId: any = null;
+    const handleSelectionChange = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const selection = window.getSelection();
+        if (selection) {
+          const text = selection.toString().trim();
+          if (text && text.length >= 3) {
+            if (!premium && notes.length >= 3) {
+              onTriggerPaywall("highlights");
+              return;
+            }
+            setSelectedText(text);
+            setShowHighlightForm(true);
+          }
+        }
+      }, 300);
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener("selectionchange", handleSelectionChange);
+    };
+  }, [notes.length, premium, onTriggerPaywall]);
+
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${activeTheme.outerBg} selection:bg-[#e2b874]/30 relative`}>
+    <div className={`h-[100dvh] flex flex-col overflow-hidden font-sans transition-colors duration-300 ${activeTheme.outerBg} selection:bg-[#e2b874]/30 relative`}>
       {/* Subtle floating escape focus button when in Focus Mode */}
       {isFocusMode && (
         <>
@@ -670,10 +758,10 @@ export default function Reader({
           {currentPage > 0 && (
             <button
               onClick={() => handlePageChange(currentPage - 1)}
-              className={`absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full transition duration-200 cursor-pointer shadow-lg z-30 opacity-20 hover:opacity-100 ${
+              className={`absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 p-2.5 sm:p-3 rounded-full transition duration-200 cursor-pointer shadow-lg z-30 opacity-20 hover:opacity-90 backdrop-blur-xs ${
                 resolvedTheme === "escuro" 
-                  ? "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white" 
-                  : "bg-white border border-gray-200 text-gray-600 hover:text-gray-900"
+                  ? "bg-zinc-900/60 border border-zinc-800 text-zinc-300 hover:text-white" 
+                  : "bg-white/60 border border-gray-200 text-gray-600 hover:text-gray-900"
               }`}
               title="Página Anterior (←)"
             >
@@ -683,33 +771,22 @@ export default function Reader({
           {currentPage < book.pages - 1 && (
             <button
               onClick={() => handlePageChange(currentPage + 1)}
-              className={`absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full transition duration-200 cursor-pointer shadow-lg z-30 opacity-20 hover:opacity-100 ${
+              className={`absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 p-2.5 sm:p-3 rounded-full transition duration-200 cursor-pointer shadow-lg z-30 opacity-20 hover:opacity-90 backdrop-blur-xs ${
                 resolvedTheme === "escuro" 
-                  ? "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white" 
-                  : "bg-white border border-gray-200 text-gray-600 hover:text-gray-900"
+                  ? "bg-zinc-900/60 border border-zinc-800 text-zinc-300 hover:text-white" 
+                  : "bg-white/60 border border-gray-200 text-gray-600 hover:text-gray-900"
               }`}
               title="Próxima Página (→)"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
           )}
-          
-          {/* Floating page indicator at the bottom center in Focus Mode */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-            <span className={`text-[10px] font-bold font-mono px-3 py-1.5 rounded-full shadow border transition-opacity duration-300 ${
-              resolvedTheme === "escuro" 
-                ? "bg-zinc-900 border-zinc-800 text-zinc-400" 
-                : "bg-white border-gray-200 text-gray-500"
-            }`}>
-              Página {currentPage + 1} de {book.pages}
-            </span>
-          </div>
         </>
       )}
 
       {/* Top Navbar */}
       {!isFocusMode && (
-        <header className={`px-4 py-2.5 md:py-3 border-b flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 shadow-sm sticky top-0 z-20 transition-colors ${
+        <header className={`px-3 py-2 md:px-5 md:py-3 border-b flex flex-col md:flex-row md:items-center justify-between gap-2 shadow-sm sticky top-0 z-20 transition-colors ${
           resolvedTheme === "escuro" 
             ? "bg-[#121214] border-zinc-800 text-zinc-100" 
             : resolvedTheme === "sepia" 
@@ -717,11 +794,11 @@ export default function Reader({
               : "bg-white border-gray-200 text-gray-900"
         }`}>
           {/* Row 1 on mobile: Title & back button on left, quick controls on the right */}
-          <div className="flex items-center justify-between w-full md:w-auto gap-3 min-w-0">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center justify-between w-full md:w-auto gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 onClick={handleBackToLibrary}
-                className={`p-2 rounded-xl transition cursor-pointer flex-shrink-0 ${
+                className={`p-1.5 rounded-xl transition cursor-pointer flex-shrink-0 ${
                   resolvedTheme === "escuro" ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100" : "hover:bg-gray-100 text-gray-600"
                 }`}
                 title="Voltar para Biblioteca"
@@ -751,6 +828,22 @@ export default function Reader({
                   <span>Audio</span>
                 </button>
               )}
+
+              {/* Collapsible Appearance button on mobile */}
+              <button
+                onClick={() => setShowMobileFontControls(!showMobileFontControls)}
+                className={`p-1.5 rounded-lg flex items-center gap-1 text-[10px] font-semibold transition cursor-pointer border ${
+                  showMobileFontControls
+                    ? "bg-[#e2b874]/20 border-[#e2b874]/50 text-[#e2b874]"
+                    : resolvedTheme === "escuro"
+                      ? "bg-zinc-900 border-zinc-800 text-zinc-300"
+                      : "bg-gray-100 border-gray-200 text-gray-700"
+                }`}
+                title="Aparência, Fonte e Tema"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Aa</span>
+              </button>
 
               <button
                 onClick={handleToggleBookmark}
@@ -798,6 +891,21 @@ export default function Reader({
                 <List className="w-4 h-4" />
               </button>
 
+              {/* Fullscreen Button Mobile */}
+              <button
+                onClick={toggleFullscreen}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isFullscreen
+                    ? "bg-[#e2b874]/20 text-[#e2b874]"
+                    : resolvedTheme === "escuro"
+                      ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200"
+                      : "text-gray-500 hover:bg-gray-100"
+                }`}
+                title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+              >
+                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+              </button>
+
               <button
                 onClick={() => setIsFocusMode(!isFocusMode)}
                 className={`p-1.5 rounded-lg transition cursor-pointer ${
@@ -816,12 +924,31 @@ export default function Reader({
             </div>
           </div>
 
-          {/* Central Controls: Font Sizes & Theme selection (Row 2 on mobile, Center on desktop) */}
-          <div className="flex items-center justify-center md:justify-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto">
-            {/* Font Sizes controls */}
-            <div className={`flex rounded-xl p-1 items-center border ${
+          {/* Central Controls: Font Sizes & Theme selection (Collapsible on mobile, Center on desktop) */}
+          <div className={`${showMobileFontControls ? "flex" : "hidden md:flex"} flex-wrap md:flex-nowrap items-center justify-center gap-2 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 ${
+            resolvedTheme === "escuro" ? "border-zinc-800" : "border-gray-200"
+          }`}>
+            {/* Font Family selector & Font Sizes controls */}
+            <div className={`flex rounded-xl p-1 items-center border gap-1 ${
               resolvedTheme === "escuro" ? "bg-zinc-900 border-zinc-800" : "bg-gray-50 border-gray-200"
             }`}>
+              <select
+                value={fontFamily}
+                onChange={(e) => setFontFamily(e.target.value)}
+                className={`text-xs font-semibold rounded-lg px-2 py-1 transition cursor-pointer outline-none ${
+                  resolvedTheme === "escuro"
+                    ? "bg-zinc-900 text-zinc-200 hover:text-white"
+                    : "bg-gray-50 text-gray-800 hover:bg-white"
+                }`}
+                title="Escolher Fonte de Leitura"
+              >
+                <option value="'Merriweather', 'Georgia', serif">Merriweather (Serif)</option>
+                <option value="'Georgia', 'Times New Roman', serif">Georgia (Clássica)</option>
+                <option value="'Inter', system-ui, sans-serif">Inter (Sans-Serif)</option>
+                <option value="'Atkinson Hyperlegible', sans-serif">Atkinson (Legível)</option>
+                <option value="'Courier Prime', monospace">Courier (Monospaçada)</option>
+              </select>
+              <div className={`w-px h-4 mx-1 ${resolvedTheme === "escuro" ? "bg-zinc-800" : "bg-gray-200"}`}></div>
               <button
                 onClick={() => setFontSize(Math.max(0.8, fontSize - 0.1))}
                 className={`p-1 px-2.5 text-xs font-bold rounded-lg transition cursor-pointer ${
@@ -831,7 +958,6 @@ export default function Reader({
               >
                 A-
               </button>
-              <div className={`w-px h-4 mx-1 ${resolvedTheme === "escuro" ? "bg-zinc-800" : "bg-gray-200"}`}></div>
               <button
                 onClick={() => setFontSize(Math.min(2.0, fontSize + 0.1))}
                 className={`p-1 px-2.5 text-xs font-bold rounded-lg transition cursor-pointer ${
@@ -862,13 +988,12 @@ export default function Reader({
                         ? "text-zinc-500 hover:text-zinc-350 hover:bg-zinc-800/20" 
                         : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-250/30"
                   }`}
-                  title={t === "auto" ? "Tema Automático (baseado no horário)" : `Tema ${t}`}
+                  title={t === "auto" ? "Tema Automático" : `Tema ${t}`}
                 >
-                  {/* Visual colored circle representing the theme */}
                   <span className={`w-3 h-3 rounded-full border border-black/10 flex-shrink-0 ${
                     t === "claro" ? "bg-white" : t === "sepia" ? "bg-[#f4ebd0]" : t === "escuro" ? "bg-zinc-950" : "bg-gradient-to-tr from-zinc-950 via-[#ebdcb3] to-white"
                   }`} />
-                  <span className="hidden sm:inline">{t === "auto" ? "Auto" : t}</span>
+                  <span className="sm:inline text-[10px]">{t === "auto" ? "Auto" : t}</span>
                 </button>
               ))}
             </div>
@@ -937,6 +1062,21 @@ export default function Reader({
               <List className="w-5 h-5" />
             </button>
 
+            {/* Fullscreen Button Desktop */}
+            <button
+              onClick={toggleFullscreen}
+              className={`p-2 rounded-xl transition cursor-pointer ${
+                isFullscreen
+                  ? "bg-[#e2b874]/20 text-[#e2b874]"
+                  : resolvedTheme === "escuro"
+                    ? "text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200"
+                    : "text-gray-500 hover:bg-gray-100"
+              }`}
+              title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            </button>
+
             <button
               onClick={() => setIsFocusMode(!isFocusMode)}
               className={`p-2 rounded-xl transition cursor-pointer ${
@@ -961,7 +1101,7 @@ export default function Reader({
         
         {/* Floating navigation buttons */}
         <AnimatePresence>
-          {showFloatingNav && (
+          {showFloatingNav && !isFocusMode && (
             <>
               {currentPage > 0 && (
                 <motion.button
@@ -974,10 +1114,14 @@ export default function Reader({
                     e.stopPropagation();
                     handlePageChange(currentPage - 1);
                   }}
-                  className="absolute left-6 top-1/2 -translate-y-1/2 p-4 rounded-full transition duration-200 cursor-pointer shadow-xl z-30 bg-amber-500 hover:bg-amber-600 hover:scale-110 text-zinc-950 flex items-center justify-center border border-amber-400"
+                  className={`absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 p-3 sm:p-4 rounded-full transition duration-200 cursor-pointer shadow-xl z-30 backdrop-blur-md opacity-75 hover:opacity-100 hover:scale-105 border flex items-center justify-center ${
+                    resolvedTheme === "escuro"
+                      ? "bg-zinc-900/80 border-zinc-700/70 text-[#e2b874] hover:bg-zinc-800"
+                      : "bg-white/80 border-gray-300/80 text-amber-700 hover:bg-gray-50"
+                  }`}
                   title="Página Anterior"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                 </motion.button>
               )}
               {currentPage < book.pages - 1 && (
@@ -991,24 +1135,30 @@ export default function Reader({
                     e.stopPropagation();
                     handlePageChange(currentPage + 1);
                   }}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 p-4 rounded-full transition duration-200 cursor-pointer shadow-xl z-30 bg-amber-500 hover:bg-amber-600 hover:scale-110 text-zinc-950 flex items-center justify-center border border-amber-400"
+                  className={`absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 p-3 sm:p-4 rounded-full transition duration-200 cursor-pointer shadow-xl z-30 backdrop-blur-md opacity-75 hover:opacity-100 hover:scale-105 border flex items-center justify-center ${
+                    resolvedTheme === "escuro"
+                      ? "bg-zinc-900/80 border-zinc-700/70 text-[#e2b874] hover:bg-zinc-800"
+                      : "bg-white/80 border-gray-300/80 text-amber-700 hover:bg-gray-50"
+                  }`}
                   title="Próxima Página"
                 >
-                  <ChevronRight className="w-6 h-6" />
+                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
                 </motion.button>
               )}
             </>
           )}
         </AnimatePresence>
 
-        {/* Discrete always-visible page indicator at the bottom right */}
-        <div className="absolute bottom-4 right-4 z-20 pointer-events-none select-none">
-          <span className={`text-[10px] font-bold font-mono px-2.5 py-1.5 rounded-lg shadow border transition-all duration-300 ${
+        {/* Discrete always-visible page indicator fixed at bottom right */}
+        <div className={`fixed z-30 pointer-events-none select-none transition-all duration-300 ${
+          isFocusMode ? "bottom-4 right-4" : "bottom-16 sm:bottom-4 right-4"
+        }`}>
+          <span className={`text-[11px] font-bold font-mono px-3 py-1.5 rounded-xl shadow-lg border transition-all duration-300 ${
             resolvedTheme === "escuro" 
-              ? "bg-zinc-950/85 border-zinc-800 text-zinc-400 shadow-black/40" 
+              ? "bg-zinc-950/90 border-zinc-800 text-zinc-300 shadow-black/50" 
               : resolvedTheme === "sepia"
-                ? "bg-[#fcf7e8]/85 border-[#ebdcb3] text-[#807255] shadow-[#ebdcb3]/20"
-                : "bg-white/85 border-gray-200 text-gray-500 shadow-gray-200/40"
+                ? "bg-[#fcf7e8]/90 border-[#ebdcb3] text-[#695d46] shadow-[#ebdcb3]/30"
+                : "bg-white/90 border-gray-200 text-gray-700 shadow-gray-200/50"
           }`}>
             Pág. {currentPage + 1} / {book.pages}
           </span>
@@ -1033,51 +1183,87 @@ export default function Reader({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.25 }}
-                className={`p-8 md:p-12 rounded-2xl border shadow-md font-serif leading-relaxed ${activeTheme.cardBg}`}
-                style={{ fontSize: `${fontSize}rem` }}
+                className={`p-8 md:p-12 rounded-2xl border shadow-md leading-relaxed ${activeTheme.cardBg}`}
+                style={{ fontSize: `${fontSize}rem`, fontFamily: fontFamily }}
                 ref={pageTextRef}
               >
                 <div className="markdown-body">
-                  <ReactMarkdown
-                    components={{
-                      h1: ({ children }) => (
-                        <h1 className={`font-serif font-bold text-2xl md:text-3xl mb-6 tracking-tight pb-3 border-b border-dashed ${
-                          resolvedTheme === "escuro" ? "text-[#e2b874] border-zinc-800" : resolvedTheme === "sepia" ? "text-[#544830] border-[#ebdcb3]" : "text-gray-900 border-gray-200"
-                        }`}>
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 className={`font-serif font-bold text-lg md:text-xl mt-8 mb-4 tracking-tight ${
-                          resolvedTheme === "escuro" ? "text-zinc-100" : resolvedTheme === "sepia" ? "text-[#544830]" : "text-gray-800"
-                        }`}>
-                          {children}
-                        </h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 className={`font-serif font-semibold text-base md:text-lg mt-6 mb-3 ${
-                          resolvedTheme === "escuro" ? "text-zinc-200" : resolvedTheme === "sepia" ? "text-[#695d46]" : "text-gray-700"
-                        }`}>
-                          {children}
-                        </h3>
-                      ),
-                      p: ({ children }) => {
-                        const textContent = React.Children.toArray(children)
-                          .map((child) => (typeof child === "string" || typeof child === "number" ? child : ""))
-                          .join("");
-                        return (
-                          <p
-                            className="mb-5 indent-6 hover:bg-[#8a7e58]/5 hover:text-[#8a7e58] p-1 rounded transition cursor-pointer text-justify"
-                            onClick={() => {
-                              if (textContent) {
-                                handleParagraphClick(textContent);
-                              }
-                            }}
-                          >
-                            {highlightChildren(children)}
-                          </p>
-                        );
-                      },
+                  {(() => {
+                    let currentParagraphIndex = 0;
+                    return (
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => (
+                            <h1 className={`font-serif font-bold text-2xl md:text-3xl mb-6 tracking-tight pb-3 border-b border-dashed ${
+                              resolvedTheme === "escuro" ? "text-[#e2b874] border-zinc-800" : resolvedTheme === "sepia" ? "text-[#544830] border-[#ebdcb3]" : "text-gray-900 border-gray-200"
+                            }`}>
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className={`font-serif font-bold text-lg md:text-xl mt-8 mb-4 tracking-tight ${
+                              resolvedTheme === "escuro" ? "text-zinc-100" : resolvedTheme === "sepia" ? "text-[#544830]" : "text-gray-800"
+                            }`}>
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className={`font-serif font-semibold text-base md:text-lg mt-6 mb-3 ${
+                              resolvedTheme === "escuro" ? "text-zinc-200" : resolvedTheme === "sepia" ? "text-[#695d46]" : "text-gray-700"
+                            }`}>
+                              {children}
+                            </h3>
+                          ),
+                          p: ({ children }) => {
+                            const pIndex = currentParagraphIndex++;
+                            const isMarked = markedPositions[currentPage] === pIndex;
+                            const textContent = React.Children.toArray(children)
+                              .map((child) => (typeof child === "string" || typeof child === "number" ? child : ""))
+                              .join("");
+                            return (
+                              <div className="relative group/p my-3">
+                                <p
+                                  className={`indent-6 p-2 rounded-xl transition text-justify ${
+                                    isMarked
+                                      ? "bg-[#e2b874]/20 border-l-4 border-[#e2b874] pl-3 text-[#e2b874] font-medium shadow-md"
+                                      : "hover:bg-[#8a7e58]/10 hover:text-[#e2b874]"
+                                  }`}
+                                  onClick={() => {
+                                    if (textContent) {
+                                      handleParagraphClick(textContent);
+                                    }
+                                  }}
+                                >
+                                  {isMarked && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-[#e2b874] text-zinc-950 font-bold px-2 py-0.5 rounded-md mr-2 shadow-sm font-sans uppercase tracking-wider">
+                                      📌 Ponto de Parada
+                                    </span>
+                                  )}
+                                  {highlightChildren(children)}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleMarkPosition(currentPage, pIndex);
+                                  }}
+                                  className={`absolute right-1 -top-2.5 transition-all p-1 px-2 text-[10px] rounded-lg font-sans font-bold flex items-center gap-1 cursor-pointer z-10 ${
+                                    isMarked
+                                      ? "bg-[#e2b874] text-zinc-950 shadow-md opacity-100"
+                                      : `bg-zinc-900/90 text-zinc-300 hover:bg-[#e2b874] hover:text-zinc-950 border border-zinc-700 ${
+                                          showFloatingNav
+                                            ? "opacity-90"
+                                            : "opacity-0 pointer-events-none sm:group-hover/p:opacity-100 sm:group-hover/p:pointer-events-auto"
+                                        }`
+                                  }`}
+                                  title={isMarked ? "Desmarcar ponto de parada" : "Marcar como última parte lida"}
+                                >
+                                  <Bookmark className={`w-3 h-3 ${isMarked ? "fill-zinc-950" : ""}`} />
+                                  <span>{isMarked ? "Desmarcar" : "Marcar parada"}</span>
+                                </button>
+                              </div>
+                            );
+                          },
                       strong: ({ children }) => (
                         <strong className={`font-bold ${
                           resolvedTheme === "escuro" ? "text-[#e2b874]" : resolvedTheme === "sepia" ? "text-[#8a7e58]" : "text-gray-900"
@@ -1226,20 +1412,23 @@ export default function Reader({
                   >
                     {preprocessMarkdownLists(book.pdfContent[currentPage] || "")}
                   </ReactMarkdown>
+                );
+              })()}
                 </div>
               </motion.div>
             </AnimatePresence>
 
-            {/* Float Highlight Editor Panel */}
+            {/* Float Highlight Editor Panel (Floating on screen) */}
             {showHighlightForm && selectedText && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white border border-[#dad5bf] p-4 rounded-xl shadow-lg mt-4 max-w-lg mx-auto"
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                className="fixed bottom-6 right-4 sm:right-6 z-50 max-w-md w-[calc(100%-2rem)] sm:w-full bg-zinc-900 border border-[#e2b874]/40 p-4.5 rounded-2xl shadow-2xl backdrop-blur-xl text-zinc-100"
               >
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
-                    <Highlighter className="w-3.5 h-3.5 text-[#8a7e58]" />
+                  <span className="text-xs font-bold text-[#e2b874] flex items-center gap-1.5 uppercase tracking-wider font-sans">
+                    <Highlighter className="w-3.5 h-3.5 text-[#e2b874]" />
                     Destacar Trecho Selecionado
                   </span>
                   <button
@@ -1247,12 +1436,12 @@ export default function Reader({
                       setSelectedText("");
                       setShowHighlightForm(false);
                     }}
-                    className="text-gray-400 hover:text-gray-600 text-xs font-semibold"
+                    className="text-zinc-400 hover:text-zinc-200 text-xs font-semibold cursor-pointer"
                   >
                     Cancelar
                   </button>
                 </div>
-                <p className="text-xs italic text-gray-600 bg-gray-50 p-2.5 rounded-lg mb-3 border-l-2 border-[#8a7e58] line-clamp-2">
+                <p className="text-xs italic text-zinc-300 bg-zinc-950/80 p-2.5 rounded-xl mb-3 border-l-2 border-[#e2b874] line-clamp-2">
                   "{selectedText}"
                 </p>
 
@@ -1350,10 +1539,6 @@ export default function Reader({
                 Anterior
               </button>
 
-              <span className={`text-xs font-bold font-mono ${activeTheme.textMuted}`}>
-                Página {currentPage + 1} de {book.pages}
-              </span>
-
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === book.pages - 1}
@@ -1370,21 +1555,33 @@ export default function Reader({
           )}
         </div>
 
-        {/* Dynamic Sidebar Right: Highlights, Bookmarks, and Gemini AI Reading Companion! */}
+        {/* Dynamic Sidebar Right: Highlights, Bookmarks, and Gemini AI Reading Companion Overlay Drawer */}
         <AnimatePresence>
           {isSidebarOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 360, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className={`h-full border-l flex flex-col justify-between flex-shrink-0 z-10 shadow-2xl transition-colors ${
-                theme === "escuro" 
-                  ? "bg-[#121214] border-zinc-800 text-zinc-100" 
-                  : theme === "sepia" 
-                    ? "bg-[#fcf7e8] border-[#ebdcb3] text-[#4a3f28]" 
-                    : "bg-white border-gray-200 text-gray-950"
-              }`}
-            >
+            <>
+              {/* Backdrop Overlay */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 cursor-pointer"
+              />
+
+              {/* Sliding Drawer Container from Right */}
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                className={`fixed top-0 right-0 bottom-0 h-full w-full max-w-[360px] sm:max-w-[400px] z-50 shadow-2xl flex flex-col justify-between transition-colors duration-300 ${
+                  theme === "escuro" 
+                    ? "bg-[#121214] border-l border-zinc-800 text-zinc-100" 
+                    : theme === "sepia" 
+                      ? "bg-[#fcf7e8] border-l border-[#ebdcb3] text-[#4a3f28]" 
+                      : "bg-white border-l border-gray-200 text-gray-950"
+                }`}
+              >
               {/* Sidebar Header tabs */}
               <div className={`p-4 border-b flex justify-between items-center ${
                 theme === "escuro" 
@@ -1699,8 +1896,9 @@ export default function Reader({
                 </div>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
+          </>
+        )}
+      </AnimatePresence>
 
         {/* Table of Contents Sliding Drawer (Left) */}
         <AnimatePresence>

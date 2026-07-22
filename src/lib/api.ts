@@ -22,7 +22,7 @@ export async function fetchBooks(search?: string, category?: string): Promise<Bo
       let localBooks = await getDownloadedBooks();
       if (search) {
         const q = search.toLowerCase();
-        localBooks = localBooks.filter(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q));
+        localBooks = localBooks.filter(b => (b.title || "").toLowerCase().includes(q) || (b.author || "").toLowerCase().includes(q));
       }
       if (category) {
         localBooks = localBooks.filter(b => b.category === category);

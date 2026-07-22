@@ -668,9 +668,9 @@ export async function fetchBooksFromFirestorePaginated(
       const qStr = search.toLowerCase();
       docs = docs.filter(
         (b: any) =>
-          b.title?.toLowerCase().includes(qStr) ||
-          b.author?.toLowerCase().includes(qStr) ||
-          b.description?.toLowerCase().includes(qStr)
+          (b.title || "").toLowerCase().includes(qStr) ||
+          (b.author || "").toLowerCase().includes(qStr) ||
+          (b.description || "").toLowerCase().includes(qStr)
       );
     }
 

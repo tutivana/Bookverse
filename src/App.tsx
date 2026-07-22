@@ -15,7 +15,9 @@ import {
   HelpCircle,
   ChevronDown,
   Bell,
-  BellOff
+  BellOff,
+  Maximize,
+  Minimize
 } from "lucide-react";
 
 import { User, Book, ReadingProgress, ReadingStats, BookNotification } from "./types";
@@ -68,10 +70,24 @@ export default function App() {
   // Notifications state
   const [notifications, setNotifications] = useState<BookNotification[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => console.warn(err));
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch((err) => console.warn(err));
+        setIsFullscreen(false);
+      }
+    }
+  };
   
   // Navigation / Active book state
   const [currentView, setCurrentView] = useState<"landing" | "auth" | "library" | "reader" | "audiobook" | "stats" | "admin" | "profile">("landing");
   const [activeBook, setActiveBook] = useState<Book | null>(null);
+  const [isReaderFocusMode, setIsReaderFocusMode] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [selectedGuestBook, setSelectedGuestBook] = useState<Book | null>(null);
 
@@ -632,108 +648,109 @@ export default function App() {
     }}>
       <div className="min-h-screen flex flex-col bg-[#09090b] font-sans text-zinc-100 selection:bg-[#e2b874]/30">
       {/* Universal Top Navigation Header */}
-      <header className="border-b border-zinc-800 bg-[#121214]/90 backdrop-blur-md sticky top-0 z-30 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          
-          {/* Logo brand */}
-          <div
-            className="flex items-center gap-2 cursor-pointer outline-none"
-            onClick={() => {
-              setCurrentView("library");
-              setIsProfileOpen(false);
-            }}
-          >
-            <div className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-[#e2b874] shadow-sm">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <span className="font-serif font-bold text-xl tracking-tight text-zinc-100 hidden sm:inline">BookVerse</span>
-          </div>
-
-          {/* Core horizontal links */}
-          <nav className="flex items-center gap-0.5 sm:gap-2 text-xs font-semibold overflow-x-auto no-scrollbar max-w-[50%] md:max-w-none">
-            {/* Public Area Links */}
-            <button
+      {currentView !== "reader" && (
+        <header className="border-b border-zinc-800 bg-[#121214]/90 backdrop-blur-md sticky top-0 z-30 shadow-md">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            
+            {/* Logo brand */}
+            <div
+              className="flex items-center gap-2 cursor-pointer outline-none"
               onClick={() => {
                 setCurrentView("library");
                 setIsProfileOpen(false);
               }}
-              className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                currentView === "library"
-                  ? "bg-[#e2b874]/10 text-[#e2b874]"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-              }`}
-              title="Biblioteca"
             >
-              <LibraryIcon className="w-4 h-4" />
-              <span className={currentView === "library" ? "inline" : "hidden md:inline"}>Biblioteca</span>
-            </button>
+              <div className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-[#e2b874] shadow-sm">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <span className="font-serif font-bold text-lg sm:text-xl tracking-tight text-zinc-100">BookVerse</span>
+            </div>
 
-            {activeBook && (
+            {/* Core horizontal links (Desktop only) */}
+            <nav className="hidden md:flex items-center gap-1 sm:gap-2 text-xs font-semibold">
+              {/* Public Area Links */}
               <button
                 onClick={() => {
-                  setCurrentView("reader");
+                  setCurrentView("library");
                   setIsProfileOpen(false);
                 }}
                 className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                  currentView === "reader" || currentView === "audiobook"
+                  currentView === "library"
                     ? "bg-[#e2b874]/10 text-[#e2b874]"
                     : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                 }`}
-                title={`Lendo: ${activeBook.title}`}
+                title="Biblioteca"
               >
-                <BookOpen className="w-4 h-4 animate-pulse" />
-                <span className={currentView === "reader" || currentView === "audiobook" ? "inline text-xs" : "hidden md:inline text-xs"}>
-                  <span className="hidden sm:inline">Lendo: </span>
-                  <span className="max-w-[45px] sm:max-w-[120px] inline-block truncate align-bottom font-serif font-bold text-[#e2b874]">{activeBook.title}</span>
-                </span>
+                <LibraryIcon className="w-4 h-4" />
+                <span>Biblioteca</span>
               </button>
-            )}
 
-            {user && (
-              <button
-                onClick={() => {
-                  setCurrentView("stats");
-                  setIsProfileOpen(false);
-                }}
-                className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                  currentView === "stats"
-                    ? "bg-[#e2b874]/10 text-[#e2b874]"
-                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-                }`}
-                title="Estatísticas"
-              >
-                <BarChart3 className="w-4 h-4" />
-                <span className={currentView === "stats" ? "inline" : "hidden md:inline"}>Estatísticas</span>
-              </button>
-            )}
-
-            {/* Separator and Admin Area Link */}
-            {user && (user.role === "Super Administrador" || user.role === "Administrador") && (
-              <>
-                <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0 self-center" />
+              {activeBook && (
                 <button
                   onClick={() => {
-                    setCurrentView("admin");
+                    setCurrentView("reader");
                     setIsProfileOpen(false);
                   }}
                   className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                    currentView === "admin"
-                      ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                    (currentView as string) === "reader" || currentView === "audiobook"
+                      ? "bg-[#e2b874]/10 text-[#e2b874]"
                       : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                   }`}
-                  title="Painel Admin"
+                  title={`Lendo: ${activeBook.title}`}
                 >
-                  <Settings className="w-4 h-4 text-amber-500" />
-                  <span className={currentView === "admin" ? "inline text-amber-500" : "hidden md:inline"}>Admin</span>
+                  <BookOpen className="w-4 h-4 animate-pulse" />
+                  <span className="text-xs">
+                    <span className="hidden sm:inline">Lendo: </span>
+                    <span className="max-w-[120px] inline-block truncate align-bottom font-serif font-bold text-[#e2b874]">{activeBook.title}</span>
+                  </span>
                 </button>
-              </>
-            )}
-          </nav>
+              )}
 
-          {/* Right User actions */}
-          <div className="flex items-center gap-1.5 sm:gap-3 relative">
-            {user ? (
-              <>
+              {user && (
+                <button
+                  onClick={() => {
+                    setCurrentView("stats");
+                    setIsProfileOpen(false);
+                  }}
+                  className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    currentView === "stats"
+                      ? "bg-[#e2b874]/10 text-[#e2b874]"
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                  }`}
+                  title="Estatísticas"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Estatísticas</span>
+                </button>
+              )}
+
+              {/* Separator and Admin Area Link */}
+              {user && (user.role === "Super Administrador" || user.role === "Administrador") && (
+                <>
+                  <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0 self-center" />
+                  <button
+                    onClick={() => {
+                      setCurrentView("admin");
+                      setIsProfileOpen(false);
+                    }}
+                    className={`px-2.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                      currentView === "admin"
+                        ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                        : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                    }`}
+                    title="Painel Admin"
+                  >
+                    <Settings className="w-4 h-4 text-amber-500" />
+                    <span className="text-amber-500">Admin</span>
+                  </button>
+                </>
+              )}
+            </nav>
+
+            {/* Right User actions */}
+            <div className="flex items-center gap-1.5 sm:gap-3 relative">
+              {user ? (
+                <>
                 {/* Notification Bell */}
                 <div>
                   <button
@@ -816,9 +833,10 @@ export default function App() {
           </div>
         </div>
       </header>
+      )}
 
       {/* Main split screen layout */}
-      <main className="flex-grow">
+      <main className={currentView === "reader" ? "h-[100dvh] overflow-hidden p-0 flex flex-col" : "flex-grow pb-20 md:pb-0"}>
         <AnimatePresence mode="wait">
           <motion.div
             key={currentView + (activeBook?.id || "")}
@@ -859,6 +877,7 @@ export default function App() {
                 progress={activeBookProgress}
                 onTriggerPaywall={triggerPaywall}
                 onUpdateUser={setUser}
+                onFocusModeChange={setIsReaderFocusMode}
               />
             )}
 
@@ -983,6 +1002,90 @@ export default function App() {
             initialReason={paywallReason}
             initialInterval={paywallInterval}
           />
+
+          {/* Native Mobile Bottom Navigation Bar */}
+          {!isReaderFocusMode && (
+            <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#121214]/95 backdrop-blur-xl border-t border-zinc-800 flex items-center justify-around py-2 px-1 md:hidden shadow-2xl">
+            <button
+              onClick={() => {
+                setCurrentView("library");
+                setIsProfileOpen(false);
+              }}
+              className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition cursor-pointer ${
+                currentView === "library"
+                  ? "text-[#e2b874]"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <LibraryIcon className="w-5 h-5" />
+              <span className="text-[10px] font-medium tracking-tight">Biblioteca</span>
+            </button>
+
+            {activeBook && (
+              <button
+                onClick={() => {
+                  setCurrentView("reader");
+                  setIsProfileOpen(false);
+                }}
+                className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition cursor-pointer ${
+                  currentView === "reader" || currentView === "audiobook"
+                    ? "text-[#e2b874]"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <BookOpen className="w-5 h-5 animate-pulse" />
+                <span className="text-[10px] font-medium tracking-tight max-w-[60px] truncate">Lendo</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setCurrentView("stats");
+                setIsProfileOpen(false);
+              }}
+              className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition cursor-pointer ${
+                currentView === "stats"
+                  ? "text-[#e2b874]"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <BarChart3 className="w-5 h-5" />
+              <span className="text-[10px] font-medium tracking-tight">Desempenho</span>
+            </button>
+
+            {(user.role === "Super Administrador" || user.role === "Administrador") && (
+              <button
+                onClick={() => {
+                  setCurrentView("admin");
+                  setIsProfileOpen(false);
+                }}
+                className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition cursor-pointer ${
+                  currentView === "admin"
+                    ? "text-amber-500"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Settings className="w-5 h-5 text-amber-500" />
+                <span className="text-[10px] font-medium tracking-tight text-amber-500">Admin</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setCurrentView("profile");
+                setIsProfileOpen(false);
+              }}
+              className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition cursor-pointer ${
+                currentView === "profile"
+                  ? "text-[#e2b874]"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <UserIcon className="w-5 h-5" />
+              <span className="text-[10px] font-medium tracking-tight">Perfil</span>
+            </button>
+          </div>
+          )}
         </>
       )}
     </div>
